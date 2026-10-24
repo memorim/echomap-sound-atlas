@@ -1,0 +1,69 @@
+[
+  {
+    "method": "get",
+    "path": "/api/sounds",
+    "status": 200,
+    "body": [
+      {
+        "city": "string",
+        "color": "string",
+        "description": "string",
+        "district": "string",
+        "duration": "number",
+        "frequency": "number",
+        "id": "number",
+        "lat": "number",
+        "lng": "number",
+        "mood": "string",
+        "recorded_at": "string",
+        "texture": "string",
+        "title": "string"
+      }
+    ]
+  },
+  {
+    "method": "get",
+    "path": "/api/sounds/1",
+    "status": 200,
+    "body": {
+      "city": "string",
+      "color": "string",
+      "description": "string",
+      "district": "string",
+      "duration": "number",
+      "frequency": "number",
+      "id": "number",
+      "lat": "number",
+      "lng": "number",
+      "mood": "string",
+      "notes": [
+        {
+          "author": "string",
+          "created_at": "string",
+          "id": "number",
+          "note": "string",
+          "sound_id": "number"
+        }
+      ],
+      "recorded_at": "string",
+      "texture": "string",
+      "title": "string"
+    }
+  },
+  {
+    "method": "post",
+    "path": "/api/notes",
+    "status": 201,
+    "body": {
+      "id": "number"
+    }
+  },
+  {
+    "method": "post",
+    "path": "/api/notes",
+    "status": 400,
+    "body": {
+      "message": "string"
+    }
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "databaseModule": "server.js",
+  "appModule": "server.js",
+  "endpoints": [
+    {
+      "path": "/api/sounds"
+    },
+    {
+      "path": "/api/sounds/1"
+    },
+    {
+      "method": "post",
+      "path": "/api/notes",
+      "status": 201,
+      "body": {
+        "soundId": 1,
+        "author": "Contract",
+        "note": "Contract note content"
+      }
+    },
+    {
+      "method": "post",
+      "path": "/api/notes",
+      "status": 400,
+      "body": {}
+    }
+  ]
+}
