@@ -7,3 +7,5 @@ test('mobile layout and recovery after a failed API request',async({page})=>{
  await page.unroute('**/api/sounds*');await page.getByRole('button',{name:'Повторить загрузку',exact:true}).click();
  await expect(page.locator('.load-feedback')).toHaveText('');
 });
+
+test('audio controls can stop, switch and play another recording',async({page})=>{const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/');await expect(page.locator('.load-feedback')).toHaveText('');await page.locator('.play').click();await expect(page.locator('.play')).toHaveText('■');await page.locator('.play').click();await page.locator('.next').click();await page.locator('.play').click();await expect(page.locator('.play')).toHaveText('■');await page.locator('.play').click();expect(errors).toEqual([]);});
