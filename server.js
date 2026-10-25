@@ -79,7 +79,7 @@ export function createApp(db = createDb()) {
   });
   app.use(express.static(resolve(root, 'public')));
   app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(resolve(root, 'public', 'index.html')));
-  return app;
+  app.use((error,_req,res,_next)=>res.status(error?.type==='entity.too.large'?413:error instanceof SyntaxError?400:503).json({message:'Не удалось обработать запрос'}));return app;
 }
 
-if (process.env.NODE_ENV !== 'test') createApp().listen(process.env.PORT || 4700, () => console.log('EchoMap: http://localhost:4700'));
+if (process.env.NODE_ENV !== 'test') createApp().listen(process.env.PORT || 4700,process.env.HOST||'127.0.0.1', () => console.log('EchoMap: http://localhost:4700'));
