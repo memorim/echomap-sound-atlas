@@ -1,31 +1,33 @@
-# EchoMap — Sound Atlas
+# EchoMap — атлас городских звуков
 
-Browse a mapped sound catalogue and leave field notes.
+Каталог звуковых зарисовок с картой, выбором настроения, проигрывателем и заметками.
 
 
-![Desktop interface](docs/desktop.png)
 
-<img src="docs/mobile.png" width="320" alt="Mobile interface">
+![Компьютерная версия](docs/desktop.png)
 
-[Short interaction recording](docs/demo.gif)
+<img src="docs/mobile.png" width="320" alt="Мобильная версия">
 
-## Implemented
+[Короткая демонстрация](docs/demo.gif)
 
-- Sound catalogue filters, location details, favourites and saved notes.
-- Browser playback using generated Web Audio textures.
+## Возможности
 
-## Stack and architecture
+- Фильтры каталога, сведения о месте и сохранение заметок.
+- Воспроизведение звуковых текстур через Web Audio.
+- Фотографии города и обложки по настроению записи.
 
-JavaScript, Express, Zod, built-in Node SQLite and a static HTML/CSS interface.
+## Стек и устройство
 
-## Technical mechanisms and security
+JavaScript, Express, Zod, встроенный SQLite в Node.js, Web Audio и HTML/CSS.
 
-- SQL values are parameterized. The interface and SQLite catalogue remain a small single-process application.
-- Malformed request JSON uses a bounded response; the default server binding is loopback.
+## Ключевые решения
 
-## Local setup
+- SQL использует связанные параметры. Интерфейс и каталог работают как небольшое однопроцессное приложение.
+- Ошибки JSON имеют ограниченный ответ; сервер по умолчанию слушает loopback.
 
-Node.js 24.18.0 and pnpm 11.7.0 (see version files).
+## Локальный запуск
+
+Node.js 24.18.0 и pnpm 11.7.0; версии закреплены в файлах проекта.
 
 ```bash
 npm install --global pnpm@11.7.0
@@ -33,17 +35,17 @@ pnpm install --frozen-lockfile
 pnpm start
 ```
 
-Open `http://localhost:4700`. For live UI development use `pnpm dev` where available. The API binds to `127.0.0.1` by default.
+Откройте `http://localhost:4700`. Сервер по умолчанию слушает 127.0.0.1. Для разработки доступен `pnpm dev`.
 
-## Configuration
+## Настройки
 
-Configure process environment variables using [.env.example](.env.example). `pnpm start` uses the process environment; it does not implicitly load that file. To load a copied `.env` explicitly, run `node --env-file=.env server.js`.
+Параметры перечислены в [.env.example](.env.example). `pnpm start` использует окружение процесса и не загружает файл автоматически. После копирования `.env` его можно загрузить явно: `node --env-file=.env server.js`.
 
-## Database and upgrades
+## Данные и обновления
 
-SQLite is stored at `data/echomap.db`. Initialization creates/migrates the schema; sample rows are included for local use. Back up the database before upgrades. Do not remove the database as a migration step.
+SQLite хранится в `data/echomap.db`. Инициализация создаёт или обновляет схему. Перед обновлением сохраните резервную копию; удалять БД вместо миграции не нужно.
 
-## Verification
+## Проверки
 
 ```bash
 pnpm test
@@ -52,17 +54,15 @@ pnpm test:upgrade
 pnpm audit --audit-level=high
 ```
 
-Existing catalogue/note API tests, malformed-JSON regression, response contract and prior-schema upgrade checks.
+Проверки каталога и заметок, некорректного JSON, контракта ответов и обновления схемы БД.
 
-CI installs locked dependencies and runs the configured checks; documentation checks also validate local links/images. Node dependency advisories are checked with `pnpm audit --audit-level=high`. A passing scanner only reports known advisories at the time of the run.
+CI устанавливает зависимости по зафиксированным версиям и запускает настроенные проверки. Отдельная проверка документации находит неверные локальные ссылки и изображения. Проверка уязвимостей учитывает известные проблемы на момент запуска.
 
-## Limits and next steps
+## Ограничения
 
-- Audio is synthesized in the browser, not a field-recording upload/streaming service. There are no public accounts or moderation.
-- Foreign-key declarations and concurrent moderation behavior are not a complete public data-integrity policy; further checks are needed before accepting untrusted notes at scale.
+- Звук синтезируется в браузере: загрузка и потоковая передача полевых записей не реализованы.
+- Нет публичных аккаунтов и модерации. Внешние ключи и конкурентная модерация требуют дополнительной проверки перед массовым приёмом недоверенных заметок.
 
-## Further documentation
+## Документация
 
-[Audit findings and follow-up](docs/AUDIT_2026_10.md) · [Technical reference](docs/TECHNICAL.md) · [Change history](CHANGELOG.md)
-
-[API request/response example](docs/API_EXAMPLE.md)
+[Результаты аудита](docs/AUDIT_2026_10.md) · [Техническая документация](docs/TECHNICAL.md) · [Пример запроса и ответа](docs/API_EXAMPLE.md) · [История изменений](CHANGELOG.md)
