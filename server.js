@@ -65,7 +65,7 @@ export function createApp(db = createDb()) {
     res.json({ ...sound, notes });
   });
   app.get('/api/stats', (_req, res) => {
-    const summary = db.prepare('SELECT COUNT(*) recordings, COUNT(DISTINCT city) cities, ROUND(SUM(duration)/60.0,1) minutes FROM sounds').get();
+    const summary = db.prepare('SELECT COUNT(*) recordings, COUNT(DISTINCT city) cities, COALESCE(ROUND(SUM(duration)/60.0,1),0) minutes FROM sounds').get();
     const moods = db.prepare('SELECT mood,COUNT(*) count FROM sounds GROUP BY mood ORDER BY count DESC').all();
     res.json({ summary, moods });
   });
