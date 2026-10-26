@@ -1,0 +1,157 @@
+{
+  "/api/sounds": [
+    {
+      "id": 4,
+      "title": "Последний трамвай",
+      "city": "Москва",
+      "district": "Сокольники",
+      "mood": "night",
+      "lat": 55.792,
+      "lng": 37.678,
+      "duration": 73,
+      "color": "#6c5f91",
+      "description": "Металл на повороте, пустая остановка и гул проводов.",
+      "frequency": 92,
+      "texture": "metal",
+      "recorded_at": "2026-07-01T23:47:00"
+    },
+    {
+      "id": 3,
+      "title": "Дождь по оранжерее",
+      "city": "Москва",
+      "district": "Останкино",
+      "mood": "rain",
+      "lat": 55.829,
+      "lng": 37.609,
+      "duration": 112,
+      "color": "#748ba7",
+      "description": "Крупные капли на стеклянной крыше и шелест листьев.",
+      "frequency": 232,
+      "texture": "rain",
+      "recorded_at": "2026-06-27T14:08:00"
+    },
+    {
+      "id": 6,
+      "title": "Ветер в высотках",
+      "city": "Москва",
+      "district": "Пресня",
+      "mood": "wind",
+      "lat": 55.752,
+      "lng": 37.539,
+      "duration": 97,
+      "color": "#7b9c7b",
+      "description": "Воздушные потоки между башнями и далёкий городской шум.",
+      "frequency": 146,
+      "texture": "wind",
+      "recorded_at": "2026-06-21T20:11:00"
+    },
+    {
+      "id": 2,
+      "title": "Подземный переход",
+      "city": "Москва",
+      "district": "Тверской",
+      "mood": "pulse",
+      "lat": 55.765,
+      "lng": 37.605,
+      "duration": 46,
+      "color": "#e87548",
+      "description": "Шаги, объявления и длинное эхо гранитного коридора.",
+      "frequency": 118,
+      "texture": "echo",
+      "recorded_at": "2026-06-18T18:21:00"
+    },
+    {
+      "id": 1,
+      "title": "Утро на Яузе",
+      "city": "Москва",
+      "district": "Басманный",
+      "mood": "calm",
+      "lat": 55.759,
+      "lng": 37.665,
+      "duration": 84,
+      "color": "#9fc7bd",
+      "description": "Вода под мостом, редкие велосипеды и первый трамвай.",
+      "frequency": 174,
+      "texture": "water",
+      "recorded_at": "2026-06-12T05:42:00"
+    },
+    {
+      "id": 5,
+      "title": "Двор после школы",
+      "city": "Москва",
+      "district": "Хамовники",
+      "mood": "human",
+      "lat": 55.733,
+      "lng": 37.574,
+      "duration": 61,
+      "color": "#e5b85c",
+      "description": "Мяч ударяется о стену, кто-то зовёт домой.",
+      "frequency": 208,
+      "texture": "voices",
+      "recorded_at": "2026-06-05T16:34:00"
+    },
+    {
+      "id": 7,
+      "title": "Рынок перед закрытием",
+      "city": "Стамбул",
+      "district": "Кадыкёй",
+      "mood": "human",
+      "lat": 40.991,
+      "lng": 29.027,
+      "duration": 129,
+      "color": "#d46b53",
+      "description": "Складывают ящики, звенят стаканы, продавцы прощаются.",
+      "frequency": 196,
+      "texture": "voices",
+      "recorded_at": "2026-05-22T19:03:00"
+    },
+    {
+      "id": 8,
+      "title": "Портовый туман",
+      "city": "Хельсинки",
+      "district": "Катаянокка",
+      "mood": "calm",
+      "lat": 60.167,
+      "lng": 24.968,
+      "duration": 105,
+      "color": "#88a9b4",
+      "description": "Гудок парома растворяется в тумане над водой.",
+      "frequency": 82,
+      "texture": "water",
+      "recorded_at": "2026-05-14T06:18:00"
+    }
+  ],
+  "/api/stats": {
+    "summary": {
+      "recordings": 8,
+      "cities": 3,
+      "minutes": 11.8
+    },
+    "moods": [
+      {
+        "mood": "human",
+        "count": 2
+      },
+      {
+        "mood": "calm",
+        "count": 2
+      },
+      {
+        "mood": "wind",
+        "count": 1
+      },
+      {
+        "mood": "rain",
+        "count": 1
+      },
+      {
+        "mood": "pulse",
+        "count": 1
+      },
+      {
+        "mood": "night",
+        "count": 1
+      }
+    ]
+  }
+}
