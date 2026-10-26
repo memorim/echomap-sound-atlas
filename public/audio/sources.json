@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1,
+    "url": "https://freesound.org/people/Fabrizio84/sounds/457960/",
+    "download": "https://cdn.freesound.org/previews/457/457960_2841496-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 189.105397,
+    "sha256": "732cdc0fce41f7b1a1db1356031a3453abd6f4c09ca0e9cff8236f9fa0f3d1c9"
+  },
+  {
+    "id": 2,
+    "url": "https://freesound.org/people/IlMotografo/sounds/679103/",
+    "download": "https://cdn.freesound.org/previews/679/679103_12704565-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 49,
+    "sha256": "9e3854b9ee49ad2f5cfb6f6e54d0e10bb35e1bf4396d02df48602c8f3a383657"
+  },
+  {
+    "id": 3,
+    "url": "https://freesound.org/people/RyanKingArt/sounds/607228/",
+    "download": "https://cdn.freesound.org/previews/607/607228_11069322-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 98.615147,
+    "sha256": "6f67fe87b97dd67f245ffaf50de7e7f5280cb4f6a1d18e6d9ff428a5f84e550e"
+  },
+  {
+    "id": 4,
+    "url": "https://freesound.org/people/VasiliiFeshchenko/sounds/838957/",
+    "download": "https://cdn.freesound.org/previews/838/838957_18267943-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 5.418667,
+    "sha256": "1077ff6d68dabebb3a716c82dda51def1d6bda5b61c77512a67081251846109a"
+  },
+  {
+    "id": 5,
+    "url": "https://freesound.org/people/AugustSandberg/sounds/252684/",
+    "download": "https://cdn.freesound.org/previews/252/252684_1934171-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 99.818667,
+    "sha256": "8da73a50a44e2eb4cf6debe7a76f13be54c6d6a03f3fd6a47f48a2452bbce671"
+  },
+  {
+    "id": 6,
+    "url": "https://freesound.org/people/Noted451/sounds/531016/",
+    "download": "https://cdn.freesound.org/previews/531/531016_9818404-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 88.372245,
+    "sha256": "2ee7c4bf9fc169a0727a6d7bde2d8b801987fc8b6f0cf27f6bb5040ac9ba38d5"
+  },
+  {
+    "id": 7,
+    "url": "https://freesound.org/people/sacaix/sounds/330720/",
+    "download": "https://cdn.freesound.org/previews/330/330720_2178474-lq.mp3",
+    "license": "CC0-1.0",
+    "duration": 270.01125,
+    "sha256": "1bead5a1ee1b5d7b1a42035eb25318cdf987ba35d253ec475576b509c112e9b1"
+  },
+  {
+    "id": 8,
+    "url": "https://freesound.org/people/blaukreuz/sounds/249758/",
+    "download": "https://cdn.freesound.org/previews/249/249758_623488-hq.mp3",
+    "license": "CC0-1.0",
+    "duration": 28.822042,
+    "sha256": "3a2fd9384a1bc23d003b8b387f9f41f059db2018d587edda1c7f20d10ec1b801"
+  }
+]

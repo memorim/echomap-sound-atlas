@@ -1,0 +1,66 @@
+{
+  "1": {
+    "title": "Утро на Яузе",
+    "description": "Звуковая сцена у реки: непрерывный плеск и шум водного потока.",
+    "audio_url": "audio/1.mp3",
+    "duration": 189,
+    "source_url": "https://freesound.org/people/Fabrizio84/sounds/457960/",
+    "license": "CC0-1.0"
+  },
+  "2": {
+    "title": "Шаги в тоннеле",
+    "description": "Шаги по камню и гравию, отражённые стенами тоннеля.",
+    "audio_url": "audio/2.mp3",
+    "duration": 49,
+    "source_url": "https://freesound.org/people/IlMotografo/sounds/679103/",
+    "license": "CC0-1.0"
+  },
+  "3": {
+    "title": "Дождь в городе",
+    "description": "Плотный городской дождь, проезжающие автомобили и далёкий уличный фон.",
+    "audio_url": "audio/3.mp3",
+    "duration": 99,
+    "source_url": "https://freesound.org/people/RyanKingArt/sounds/607228/",
+    "license": "CC0-1.0"
+  },
+  "4": {
+    "title": "Проезжающий трамвай",
+    "description": "Приближение трамвая, шум колёс и металлический гул проезда.",
+    "audio_url": "audio/4.mp3",
+    "duration": 5,
+    "source_url": "https://freesound.org/people/VasiliiFeshchenko/sounds/838957/",
+    "license": "CC0-1.0"
+  },
+  "5": {
+    "title": "Двор после школы",
+    "description": "Детские голоса и игры на школьной площадке; звонок и постепенно затихающий двор.",
+    "audio_url": "audio/5.mp3",
+    "duration": 100,
+    "source_url": "https://freesound.org/people/AugustSandberg/sounds/252684/",
+    "license": "CC0-1.0"
+  },
+  "6": {
+    "title": "Ветер в деревьях",
+    "description": "Устойчивый ветер в кронах деревьев и шелест листвы.",
+    "audio_url": "audio/6.mp3",
+    "duration": 88,
+    "source_url": "https://freesound.org/people/Noted451/sounds/531016/",
+    "license": "CC0-1.0"
+  },
+  "7": {
+    "title": "Голоса рынка",
+    "description": "Живой фон рынка: разговоры, шаги и движение среди торговых рядов.",
+    "audio_url": "audio/7.mp3",
+    "duration": 270,
+    "source_url": "https://freesound.org/people/sacaix/sounds/330720/",
+    "license": "CC0-1.0"
+  },
+  "8": {
+    "title": "Гавань под водой",
+    "description": "Гидрофонная запись гавани: подводный шум, движение воды и двигатель судна.",
+    "audio_url": "audio/8.mp3",
+    "duration": 29,
+    "source_url": "https://freesound.org/people/blaukreuz/sounds/249758/",
+    "license": "CC0-1.0"
+  }
+}
