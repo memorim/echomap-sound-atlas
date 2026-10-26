@@ -1,11 +1,13 @@
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 const root = dirname(fileURLToPath(import.meta.url));
+const recordings = JSON.parse(readFileSync(resolve(root, 'public/audio/recordings.json'), 'utf8'));
+const withRecording = sound => ({ ...sound, ...recordings[sound.id] });
 
 export function createDb(file = resolve(root, 'data', 'echomap.db')) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
@@ -56,16 +58,17 @@ export function createApp(db = createDb()) {
     if (city !== 'all') { clauses.push('city=$city'); params.$city = city; }
     if (mood !== 'all') { clauses.push('mood=$mood'); params.$mood = mood; }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    res.json(db.prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`).all(params));
+    res.json(db.prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`).all(params).map(withRecording));
   });
   app.get('/api/sounds/:id', (req, res) => {
     const sound = db.prepare('SELECT * FROM sounds WHERE id=?').get(Number(req.params.id));
     if (!sound) return res.status(404).json({ message: 'Запись не найдена' });
     const notes = db.prepare('SELECT * FROM field_notes WHERE sound_id=? ORDER BY created_at DESC').all(sound.id);
-    res.json({ ...sound, notes });
+    res.json({ ...withRecording(sound), notes });
   });
   app.get('/api/stats', (_req, res) => {
-    const summary = db.prepare('SELECT COUNT(*) recordings, COUNT(DISTINCT city) cities, COALESCE(ROUND(SUM(duration)/60.0,1),0) minutes FROM sounds').get();
+    const sounds = db.prepare('SELECT * FROM sounds').all().map(withRecording);
+    const summary = { recordings: sounds.length, cities: new Set(sounds.map(s => s.city)).size, minutes: Math.round(sounds.reduce((total,s) => total + s.duration, 0) / 6) / 10 };
     const moods = db.prepare('SELECT mood,COUNT(*) count FROM sounds GROUP BY mood ORDER BY count DESC').all();
     res.json({ summary, moods });
   });

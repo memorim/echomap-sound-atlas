@@ -31,27 +31,35 @@ async function load(...args) {
     loadFeedback.append(retry);
   }
 }
-let sounds = [],
-  active = 0,
-  playing = false,
-  timer,
-  audio,
-  sources = [],
-  bus,
-  playback = 0,
-  starting = false;
-const positions = [
-  ["23%", "27%"],
-  ["58%", "38%"],
-  ["71%", "20%"],
-  ["76%", "67%"],
-  ["28%", "72%"],
-  ["13%", "45%"],
-  ["82%", "48%"],
-  ["48%", "16%"],
-];
+let sounds = [], active = 0, playing = false, playback = 0, starting = false;
+const audio = new Audio();
+audio.preload = "none";
+
+const locationMap = L.map("location-map", { scrollWheelZoom: false }).setView([55.756, 37.623], 12);
+const mapCaption = document.querySelector(".map-caption");
+const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}).addTo(locationMap);
+tiles.on("tileerror", () => { mapCaption.textContent = "Подложка временно недоступна. Точки и список остаются доступны."; });
+tiles.on("tileload", () => { mapCaption.textContent = "OpenStreetMap · прокрутка карты кнопками + / −"; });
+const mapMarkers = L.layerGroup().addTo(locationMap);
+new ResizeObserver(() => locationMap.invalidateSize()).observe(document.querySelector("#location-map"));
+function renderMarkers() {
+  mapMarkers.clearLayers();
+  sounds.forEach((sound, index) => {
+    const pin = L.marker([sound.lat, sound.lng], {
+      icon: L.divIcon({ className: "location-pin" + (index === active ? " selected" : ""), html: String(index + 1), iconSize: [40,40] }),
+      title: sound.title, alt: sound.title,
+    }).addTo(mapMarkers).on("click", () => select(index));
+    pin.getElement().dataset.index = index;
+    pin.getElement().addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") { L.DomEvent.stop(event); select(index); }
+    });
+    pin.bindTooltip(document.createTextNode(sound.title));
+  });
+}
 const fmt = (s) =>
-  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 async function loadData(mood = "all", signal) {
   sounds = await fetch(`/api/sounds?mood=${encodeURIComponent(mood)}`, {
     signal,
@@ -71,21 +79,16 @@ async function loadData(mood = "all", signal) {
   document.querySelector("#minutes").textContent = stats.summary.minutes;
 }
 function render() {
-  document.querySelector("#markers").innerHTML = sounds
-    .map(
-      (s, i) =>
-        `<button class="marker ${i === active ? "active" : ""}" style="--x:${positions[i % positions.length][0]};--y:${positions[i % positions.length][1]};--color:${s.color}" data-index="${i}" title="${s.title}"></button>`,
-    )
-    .join("");
+  renderMarkers();
   document.querySelector("#sound-list").innerHTML =
     sounds
       .map(
         (s, i) =>
-          `<article class="sound-row" data-index="${i}" style="--color:${s.color}"><i>${String(i + 1).padStart(2, "0")}</i><div><h3>${s.title}</h3><small>${s.city.toUpperCase()} · ${s.district.toUpperCase()}</small></div><span>${s.texture}</span><span>${new Date(s.recorded_at).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span><button>Слушать ${fmt(s.duration)}</button></article>`,
+          `<article class="sound-row" data-index="${i}" style="--color:${s.color}"><i>${String(i + 1).padStart(2, "0")}</i><div><h3>${s.title}</h3><small>${s.city.toUpperCase()} · ${s.district.toUpperCase()}</small></div><span>${s.texture}</span><span>${"MP3 · CC0"}</span><button>Слушать ${fmt(s.duration)}</button></article>`,
       )
       .join("") || '<p role="status">По выбранному настроению записей нет.</p>';
   document
-    .querySelectorAll("[data-index]")
+    .querySelectorAll(".sound-row[data-index]")
     .forEach(
       (el) =>
         (el.onclick = () =>
@@ -101,6 +104,7 @@ function select(index, autoplay = false) {
   document.querySelector(".previous").disabled = !s;
   document.querySelector("#audio-status").textContent = "";
   document.querySelector("#cover-photo").hidden = !s;
+  document.querySelector("#recording-source").hidden = !s;
   if (!s) {
     document.querySelector("#title").textContent = "Нет записей";
     document.querySelector("#description").textContent =
@@ -111,6 +115,11 @@ function select(index, autoplay = false) {
     document.querySelector("#progress").style.width = "0";
     return;
   }
+  locationMap.fitBounds(sounds.filter(sound => sound.city === s.city).map(sound => [sound.lat, sound.lng]), {padding:[40,40],maxZoom:13,animate:false});
+  mapMarkers.eachLayer(marker => marker.getElement()?.classList.toggle("selected", Number(marker.getElement().dataset.index) === index));
+  const source = document.querySelector("#recording-source");
+  source.href = s.source_url;
+  source.textContent = "Источник записи · CC0";
   document.querySelector("#cover").style.setProperty("--cover", s.color);
   document.querySelector("#cover-photo").src =
     `photos/${{ human: "pulse", wind: "calm" }[s.mood] ?? s.mood}.webp`;
@@ -125,11 +134,6 @@ function select(index, autoplay = false) {
   document.querySelector("#elapsed").textContent = "00:00";
   document.querySelector("#progress").style.width = "0";
   document
-    .querySelectorAll(".marker")
-    .forEach((button) =>
-      button.classList.toggle("active", Number(button.dataset.index) === index),
-    );
-  document
     .querySelectorAll(".sound-row button")
     .forEach((button) =>
       button.setAttribute(
@@ -140,116 +144,58 @@ function select(index, autoplay = false) {
   if (autoplay) play();
 }
 async function play() {
-  if (playing || starting) {
-    stop();
-    return;
-  }
-  const s = sounds[active];
-  if (!s) return;
+  if (playing || starting) { stop(); return; }
+  const sound = sounds[active];
+  if (!sound?.audio_url) return;
   const version = ++playback;
   starting = true;
   const status = document.querySelector("#audio-status");
-  document.querySelector(".play").textContent = "…";
-  document.querySelector(".play").setAttribute("aria-label", "Отменить запуск");
-  status.textContent = "Разрешите воспроизведение звука в браузере…";
+  const control = document.querySelector(".play");
+  control.textContent = "…";
+  control.setAttribute("aria-label", "Отменить запуск");
+  status.textContent = "Загружаем аудиозапись…";
+  audio.src = sound.audio_url;
+  audio.volume = 0.6;
   try {
-    if (!audio || audio.state === "closed") {
-      audio = new AudioContext();
-      const context = audio;
-      context.addEventListener("statechange", () => {
-        if (context === audio && context.state !== "running" && playing) {
-          stop();
-          status.textContent =
-            "Звук приостановлен браузером. Нажмите воспроизведение снова.";
-        }
-      });
-    }
-    await audio.resume();
+    await audio.play();
     if (version !== playback) return;
-    if (audio.state !== "running") throw Error("Audio suspended");
-    const master = audio.createGain();
-    bus = master;
-    master.gain.value = 0.07;
-    master.connect(audio.destination);
-    const osc = audio.createOscillator();
-    const gain = audio.createGain();
-    osc.type = s.texture === "metal" ? "square" : "sine";
-    osc.frequency.value = s.frequency;
-    gain.gain.value = 0.32;
-    osc.connect(gain).connect(master);
-    osc.start();
-    sources.push(osc);
-    const buffer = audio.createBuffer(
-      1,
-      audio.sampleRate * 2,
-      audio.sampleRate,
-    );
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++)
-      data[i] = (Math.random() * 2 - 1) * (0.2 + Math.sin(i / 18000) * 0.15);
-    const noise = audio.createBufferSource();
-    const ng = audio.createGain();
-    ng.gain.value = s.texture === "rain" ? 1.1 : 0.35;
-    noise.buffer = buffer;
-    noise.loop = true;
-    noise.connect(ng).connect(master);
-    noise.start();
-    sources.push(noise);
-    playing = true;
-    starting = false;
+    starting = false; playing = true;
     status.textContent = "";
-    document.querySelector(".play").setAttribute("aria-pressed", "true");
-    document
-      .querySelector(".play")
-      .setAttribute("aria-label", "Остановить воспроизведение");
-    document.querySelector("#elapsed").textContent = "00:00";
-    document.querySelector("#progress").style.width = "0";
-    document.querySelector(".play").textContent = "■";
-    let elapsed = 0;
-    timer = setInterval(() => {
-      elapsed++;
-      document.querySelector("#elapsed").textContent = fmt(elapsed);
-      document.querySelector("#progress").style.width =
-        `${(elapsed / s.duration) * 100}%`;
-      if (elapsed >= s.duration) stop();
-    }, 1000);
+    control.textContent = "■";
+    control.setAttribute("aria-pressed", "true");
+    control.setAttribute("aria-label", "Остановить воспроизведение");
   } catch {
-    if (version === playback) {
-      stop();
-      status.textContent =
-        "Не удалось включить звук. Проверьте разрешение браузера и повторите.";
-    }
+    if (version !== playback) return;
+    stop();
+    status.textContent = "Не удалось загрузить аудиозапись. Повторите воспроизведение.";
   }
 }
 function stop() {
-  playback++;
-  starting = false;
-  playing = false;
-  if (timer) clearInterval(timer);
-  timer = null;
-  for (const source of sources) {
-    source.stop();
-    source.disconnect();
-  }
-  sources = [];
-  if (bus) {
-    bus.disconnect();
-    bus = null;
-  }
-  if (audio && audio.state !== "closed") audio.suspend().catch(() => {});
-  document.querySelector(".play").textContent = "▶";
-  document.querySelector(".play").setAttribute("aria-label", "Воспроизвести");
-  document.querySelector(".play").setAttribute("aria-pressed", "false");
+  playback++; starting = false; playing = false;
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+  const control = document.querySelector(".play");
+  control.textContent = "▶";
+  control.setAttribute("aria-label", "Воспроизвести");
+  control.setAttribute("aria-pressed", "false");
 }
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stop();
+audio.addEventListener("timeupdate", () => {
+  const duration = audio.duration;
+  document.querySelector("#elapsed").textContent = fmt(audio.currentTime);
+  document.querySelector("#progress").style.width = Number.isFinite(duration) && duration > 0 ? `${audio.currentTime / duration * 100}%` : "0";
 });
-window.addEventListener("pagehide", () => {
+audio.addEventListener("loadedmetadata", () => {
+  if (Number.isFinite(audio.duration)) document.querySelector("#duration").textContent = fmt(audio.duration);
+});
+audio.addEventListener("ended", stop);
+audio.addEventListener("error", () => {
+  if (!playing && !starting) return;
   stop();
-  const context = audio;
-  audio = null;
-  if (context && context.state !== "closed") context.close().catch(() => {});
+  document.querySelector("#audio-status").textContent = "Не удалось загрузить аудиозапись. Повторите воспроизведение.";
 });
+document.addEventListener("visibilitychange", () => { if (document.hidden) stop(); });
+window.addEventListener("pagehide", stop);
 
 document.querySelector(".play").onclick = play;
 document.querySelector(".next").onclick = () =>
