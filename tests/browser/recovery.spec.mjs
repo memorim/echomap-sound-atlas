@@ -42,6 +42,21 @@ test('empty selection disables navigation and playback',async({page})=>{
  await page.route('**/api/sounds*',r=>r.fulfill({contentType:'application/json',body:'[]'}));await page.goto('/');await expect(page.locator('#title')).toHaveText('Нет записей');for(const selector of ['.play','.previous','.next'])await expect(page.locator(selector)).toBeDisabled();
 });
 
+test('recordings use distinct covers, seek during playback and remember volume',async({page})=>{
+ await page.goto('/');
+ await page.getByTitle('Шаги в тоннеле',{exact:true}).press('Enter');
+ await expect(page.locator('#cover-photo')).toHaveAttribute('src','photos/tunnel.webp');
+ await page.locator('#volume').press('Home');
+ await page.reload();
+ await expect(page.locator('#volume')).toHaveValue('0');
+ await page.getByTitle('Двор после школы',{exact:true}).press('Enter');
+ await expect(page.locator('#cover-photo')).toHaveAttribute('src','photos/schoolyard.webp');
+ if (await page.locator('.play').getAttribute('aria-pressed') !== 'true') await page.locator('.play').click();
+ await expect(page.locator('#seek')).toBeEnabled();
+ await page.locator('#seek').press('End');
+ await expect(page.locator('.play')).toHaveAttribute('aria-pressed','false');
+});
+
 test('keyboard selection retains focus on its recording control',async({page})=>{
  await page.goto('/');const button=page.locator('.sound-row button').first();await button.focus();await page.keyboard.press('Enter');await expect(button).toBeFocused();await expect(page.locator('.play')).toHaveAttribute('aria-pressed','true');await page.locator('.play').click();
 });

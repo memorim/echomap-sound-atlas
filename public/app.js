@@ -2,7 +2,7 @@ const loadFeedback = document.createElement("p");
 loadFeedback.className = "load-feedback";
 loadFeedback.setAttribute("role", "status");
 loadFeedback.style.cssText =
-  "position:fixed;bottom:16px;left:16px;right:16px;z-index:9999;background:#fff8dd;color:#222;padding:12px 20px;margin:0;font:14px/1.5 system-ui;border-radius:8px";
+  "position:fixed;bottom:16px;left:16px;right:16px;z-index:9999;background:#f1f0ea;color:#292a2c;padding:12px 20px;margin:0;font:14px/1.5 system-ui;border-radius:8px";
 document.querySelector("main").prepend(loadFeedback);
 let lastLoadArgs = [],
   loadController;
@@ -34,6 +34,20 @@ async function load(...args) {
 let sounds = [], active = 0, playing = false, playback = 0, starting = false;
 const audio = new Audio();
 audio.preload = "none";
+const seek = document.querySelector("#seek");
+const volume = document.querySelector("#volume");
+try {
+  const saved = localStorage.getItem("echomap-volume");
+  if (saved !== null && /^(100|[1-9]?\d)$/.test(saved)) volume.value = saved;
+} catch { /* Private sessions can still use the slider. */ }
+audio.volume = volume.valueAsNumber / 100;
+volume.oninput = () => {
+  audio.volume = volume.valueAsNumber / 100;
+  try { localStorage.setItem("echomap-volume", volume.value); } catch { /* Session only. */ }
+};
+seek.oninput = () => {
+  if (Number.isFinite(audio.duration)) audio.currentTime = Math.min(audio.duration, seek.valueAsNumber);
+};
 
 const locationMap = L.map("location-map", { scrollWheelZoom: false }).setView([55.756, 37.623], 12);
 const mapCaption = document.querySelector(".map-caption");
@@ -105,6 +119,8 @@ function select(index, autoplay = false) {
   document.querySelector("#audio-status").textContent = "";
   document.querySelector("#cover-photo").hidden = !s;
   document.querySelector("#recording-source").hidden = !s;
+  const credit = document.querySelector("#photo-credit");
+  credit.hidden = true;
   if (!s) {
     document.querySelector("#title").textContent = "Нет записей";
     document.querySelector("#description").textContent =
@@ -112,7 +128,7 @@ function select(index, autoplay = false) {
     document.querySelector("#meta").textContent = "";
     document.querySelector("#duration").textContent = "00:00";
     document.querySelector("#elapsed").textContent = "00:00";
-    document.querySelector("#progress").style.width = "0";
+    seek.value = "0";
     return;
   }
   locationMap.fitBounds(sounds.filter(sound => sound.city === s.city).map(sound => [sound.lat, sound.lng]), {padding:[40,40],maxZoom:13,animate:false});
@@ -121,8 +137,14 @@ function select(index, autoplay = false) {
   source.href = s.source_url;
   source.textContent = "Источник записи · CC0";
   document.querySelector("#cover").style.setProperty("--cover", s.color);
-  document.querySelector("#cover-photo").src =
-    `photos/${{ human: "pulse", wind: "calm" }[s.mood] ?? s.mood}.webp`;
+  const photo = {2: "tunnel", 5: "schoolyard"}[s.id] ?? ({human: "pulse", wind: "calm"}[s.mood] ?? s.mood);
+  document.querySelector("#cover-photo").src = `photos/${photo}.webp`;
+  document.querySelector("#cover-photo").alt = {2: "Пешеходный тоннель под Шелепихинским мостом", 5: "Школьный двор в Верее"}[s.id] ?? "Городской пейзаж";
+  if (s.id === 2 || s.id === 5) {
+    credit.href = s.id === 2 ? "https://commons.wikimedia.org/wiki/File:Moscow,_Shelepikhinsky_Bridge_stairs_and_tunnels,_May_2025_01.jpg" : "https://commons.wikimedia.org/wiki/File:Vereya_school_yard_01.JPG";
+    credit.textContent = s.id === 2 ? "Фото: Retired electrician · CC0" : "Фото: NVO · CC BY-SA 3.0";
+    credit.hidden = false;
+  }
   document.querySelector("#cover-number").textContent = String(
     index + 1,
   ).padStart(2, "0");
@@ -132,7 +154,7 @@ function select(index, autoplay = false) {
   document.querySelector("#description").textContent = s.description;
   document.querySelector("#duration").textContent = fmt(s.duration);
   document.querySelector("#elapsed").textContent = "00:00";
-  document.querySelector("#progress").style.width = "0";
+  seek.value = "0";
   document
     .querySelectorAll(".sound-row button")
     .forEach((button) =>
@@ -155,7 +177,6 @@ async function play() {
   control.setAttribute("aria-label", "Отменить запуск");
   status.textContent = "Загружаем аудиозапись…";
   audio.src = sound.audio_url;
-  audio.volume = 0.6;
   try {
     await audio.play();
     if (version !== playback) return;
@@ -172,6 +193,8 @@ async function play() {
 }
 function stop() {
   playback++; starting = false; playing = false;
+  seek.disabled = true;
+  seek.value = "0";
   audio.pause();
   audio.removeAttribute("src");
   audio.load();
@@ -183,10 +206,14 @@ function stop() {
 audio.addEventListener("timeupdate", () => {
   const duration = audio.duration;
   document.querySelector("#elapsed").textContent = fmt(audio.currentTime);
-  document.querySelector("#progress").style.width = Number.isFinite(duration) && duration > 0 ? `${audio.currentTime / duration * 100}%` : "0";
+  if (Number.isFinite(duration)) seek.value = String(audio.currentTime);
 });
 audio.addEventListener("loadedmetadata", () => {
-  if (Number.isFinite(audio.duration)) document.querySelector("#duration").textContent = fmt(audio.duration);
+  if (Number.isFinite(audio.duration)) {
+    seek.disabled = false;
+    seek.max = String(audio.duration);
+    document.querySelector("#duration").textContent = fmt(audio.duration);
+  }
 });
 audio.addEventListener("ended", stop);
 audio.addEventListener("error", () => {
