@@ -113,6 +113,7 @@ function select(index, autoplay = false) {
   stop();
   active = index;
   const s = sounds[index];
+  void loadNotes(s?.id);
   document.querySelector(".play").disabled = !s;
   document.querySelector(".next").disabled = !s;
   document.querySelector(".previous").disabled = !s;
@@ -239,4 +240,61 @@ document.querySelectorAll("[data-mood]").forEach(
       load(b.dataset.mood);
     }),
 );
+const notesPanel = document.createElement('section');
+notesPanel.className = 'field-notes';
+notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
+document.querySelector('main').append(notesPanel);
+const notesForm = document.querySelector('#notes-form');
+let noteSoundId, notesRequest = 0;
+const drafts = new Map();
+async function loadNotes(soundId) {
+  if (noteSoundId) drafts.set(noteSoundId, notesForm.elements.note.value);
+  noteSoundId = soundId;
+  notesForm.elements.note.value = drafts.get(soundId) || '';
+  notesPanel.hidden = !soundId;
+  const version = ++notesRequest;
+  if (!soundId) return;
+  const status = document.querySelector('#notes-status');
+  const list = document.querySelector('#notes-list');
+  list.replaceChildren();
+  status.textContent = 'Загружаем заметки…';
+  try {
+    const response = await fetch(`/api/sounds/${soundId}`);
+    if (!response.ok) throw new Error();
+    const sound = await response.json();
+    if (version !== notesRequest) return;
+    for (const note of sound.notes) {
+      const item = document.createElement('li');
+      item.textContent = `${note.author}: ${note.note}`;
+      list.append(item);
+    }
+    status.textContent = sound.notes.length ? '' : 'Пока нет заметок. Добавьте первую.';
+  } catch {
+    if (version !== notesRequest) return;
+    status.textContent = 'Не удалось загрузить заметки. ';
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.textContent = 'Повторить';
+    retry.onclick = () => loadNotes(soundId); status.append(retry);
+  }
+}
+notesForm.onsubmit = async (event) => {
+  event.preventDefault();
+  const soundId = noteSoundId;
+  if (!soundId) return;
+  const submit = notesForm.querySelector('button');
+  submit.disabled = true;
+  const draft = notesForm.elements.note.value;
+  try {
+    const response = await fetch('/api/notes', { method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({soundId, author:notesForm.elements.author.value, note:draft}) });
+    if (!response.ok) throw new Error();
+    drafts.delete(soundId);
+    if (noteSoundId === soundId) {
+      if (notesForm.elements.note.value === draft) notesForm.elements.note.value = '';
+      await loadNotes(soundId);
+    }
+  } catch {
+    if (noteSoundId === soundId) document.querySelector('#notes-status').textContent = 'Не удалось сохранить заметку. Текст сохранён в форме; повторите отправку.';
+  } finally { submit.disabled = false; }
+};
 load();

@@ -60,3 +60,19 @@ test('recordings use distinct covers, seek during playback and remember volume',
 test('keyboard selection retains focus on its recording control',async({page})=>{
  await page.goto('/');const button=page.locator('.sound-row button').first();await button.focus();await page.keyboard.press('Enter');await expect(button).toBeFocused();await expect(page.locator('.play')).toHaveAttribute('aria-pressed','true');await page.locator('.play').click();
 });
+
+test('field notes preserve failed submissions and display user text safely', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#notes-form')).toBeVisible();
+  await page.locator('#notes-form input').fill('Тестовый автор');
+  await page.locator('#notes-form textarea').fill('<img src=x onerror=alert(1)>');
+  await page.route('**/api/notes', route => route.fulfill({status:503,contentType:'application/json',body:'{}'}));
+  await page.locator('#notes-form button').click();
+  await expect(page.locator('#notes-status')).toContainText('Не удалось сохранить');
+  await expect(page.locator('#notes-form textarea')).toHaveValue('<img src=x onerror=alert(1)>');
+  await page.unroute('**/api/notes');
+  await page.locator('#notes-form button').click();
+  await expect(page.locator('#notes-list')).toContainText('<img src=x onerror=alert(1)>');
+  await expect(page.locator('#notes-list img')).toHaveCount(0);
+  await expect(page.locator('#notes-form textarea')).toHaveValue('');
+});
