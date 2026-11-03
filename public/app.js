@@ -1,3 +1,4 @@
+const escapeText=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const loadFeedback = document.createElement("p");
 loadFeedback.className = "load-feedback";
 loadFeedback.setAttribute("role", "status");
@@ -98,7 +99,7 @@ function render() {
     sounds
       .map(
         (s, i) =>
-          `<article class="sound-row" data-index="${i}" style="--color:${s.color}"><i>${String(i + 1).padStart(2, "0")}</i><div><h3>${s.title}</h3><small>${s.city.toUpperCase()} · ${s.district.toUpperCase()}</small></div><span>${s.texture}</span><span>${"MP3 · CC0"}</span><button>Слушать ${fmt(s.duration)}</button></article>`,
+          `<article class="sound-row" data-index="${i}" style="--color:${s.color}"><i>${String(i + 1).padStart(2, "0")}</i><div><h3>${escapeText(s.title)}</h3><small>${escapeText(s.city.toUpperCase())} · ${escapeText(s.district.toUpperCase())}</small></div><span>${escapeText(s.texture)}</span><span>${"MP3 · CC0"}</span><button>Слушать ${fmt(s.duration)}</button></article>`,
       )
       .join("") || '<p role="status">По выбранному настроению записей нет.</p>';
   document
@@ -298,3 +299,8 @@ notesForm.onsubmit = async (event) => {
   } finally { submit.disabled = false; }
 };
 load();
+
+const uploadPanel=document.createElement('section');uploadPanel.className='field-notes';
+uploadPanel.innerHTML='<h2>Добавить аудиозапись</h2><p>Несжатый PCM WAV, 1–600 секунд, до 20 МБ. Перед публикацией запись проверит модератор.</p><form id="upload-audio"><label>Ключ автора<input name="token" type="password" minlength="32" required autocomplete="off"></label><label>Название<input name="title" required minlength="3" maxlength="100"></label><label>Город<input name="city" required minlength="2" maxlength="80"></label><label>Широта<input name="lat" type="number" step="any" min="-90" max="90" required></label><label>Долгота<input name="lng" type="number" step="any" min="-180" max="180" required></label><label>Аудиофайл<input name="audio" type="file" accept="audio/wav,.wav" required></label><label><input name="consent" type="checkbox" required> Я автор записи и разрешаю её публикацию по CC0.</label><button type="submit">Отправить на модерацию</button><p role="status"></p></form>';
+document.querySelector('main').append(uploadPanel);
+uploadPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,button=form.querySelector('button'),status=form.querySelector('p'),file=form.elements.audio.files[0];if(!file||file.size>20*1024*1024){status.textContent='Выберите WAV до 20 МБ';return;}button.disabled=true;try{const query=new URLSearchParams({title:form.elements.title.value,city:form.elements.city.value,lat:form.elements.lat.value,lng:form.elements.lng.value,license:'CC0-1.0'});const response=await fetch('/api/uploads?'+query,{method:'POST',headers:{'Content-Type':'audio/wav',Authorization:'Bearer '+form.elements.token.value},body:file});const data=await response.json();status.textContent=response.ok?'Запись №'+data.id+' отправлена на модерацию':data.message;if(response.ok)form.elements.audio.value='';}catch{status.textContent='Не удалось загрузить запись. Повторите позже.';}finally{button.disabled=false;}};

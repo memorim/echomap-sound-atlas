@@ -1,3 +1,5 @@
+import {initializeUploads,uploadRoutes} from "./uploads.js";
+import {ownerAccess,publicOrigin} from "./owner-access.js";
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -40,6 +42,7 @@ export function createDb(file = resolve(root, 'data', 'echomap.db')) {
       (1,'Марина','Лучше слушать в наушниках: справа появляется звон велосипеда.','2026-06-13T10:00:00'),
       (3,'Антон','Запись сделана прямо во время летней грозы.','2026-06-28T08:40:00');
   `);
+  initializeUploads(db);
   return db;
 }
 
@@ -48,26 +51,30 @@ const noteSchema = z.object({
   note: z.string().trim().min(5).max(300),
 });
 
-export function createApp(db = createDb()) {
+export function createApp(db = createDb(), {uploadDirectory=resolve(root,"data","uploads")}={}) {
   const app = express();
-  app.use(express.json());
+  const hosted=publicOrigin();
+  app.use('/api',(req,res,next)=>{if(hosted ? req.get('host')!==hosted.host : !['localhost','127.0.0.1','[::1]'].includes(req.hostname))return res.status(403).json({message:'Host not allowed'});if(!['GET','HEAD','OPTIONS'].includes(req.method)&&(req.get('sec-fetch-site')==='cross-site'||(req.get('origin')&&req.get('origin')!==(hosted?.origin||`${req.protocol}://${req.get('host')}`))))return res.status(403).json({message:'Origin not allowed'});next();});
+  app.use(express.json({limit:'16kb'}));
+  uploadRoutes(app,db,{directory:uploadDirectory,moderator:ownerAccess()});
+  const decorate=sound=>{const row=db.prepare('SELECT sound_id FROM user_recordings WHERE sound_id=?').get(sound.id);return row?{...sound,audio_url:'/api/audio/'+sound.id,source_url:'/api/sounds/'+sound.id}:withRecording(sound);};
   app.get('/api/sounds', (req, res) => {
     const city = String(req.query.city || 'all');
     const mood = String(req.query.mood || 'all');
-    const clauses = []; const params = {};
+    const clauses = ["id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')"]; const params = {};
     if (city !== 'all') { clauses.push('city=$city'); params.$city = city; }
     if (mood !== 'all') { clauses.push('mood=$mood'); params.$mood = mood; }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    res.json(db.prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`).all(params).map(withRecording));
+    res.json(db.prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`).all(params).map(decorate));
   });
   app.get('/api/sounds/:id', (req, res) => {
-    const sound = db.prepare('SELECT * FROM sounds WHERE id=?').get(Number(req.params.id));
+    const sound = db.prepare("SELECT * FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')").get(Number(req.params.id));
     if (!sound) return res.status(404).json({ message: 'Запись не найдена' });
     const notes = db.prepare('SELECT * FROM field_notes WHERE sound_id=? ORDER BY created_at DESC').all(sound.id);
-    res.json({ ...withRecording(sound), notes });
+    res.json({ ...decorate(sound), notes });
   });
   app.get('/api/stats', (_req, res) => {
-    const sounds = db.prepare('SELECT * FROM sounds').all().map(withRecording);
+    const sounds = db.prepare("SELECT * FROM sounds WHERE id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')").all().map(decorate);
     const summary = { recordings: sounds.length, cities: new Set(sounds.map(s => s.city)).size, minutes: Math.round(sounds.reduce((total,s) => total + s.duration, 0) / 6) / 10 };
     const moods = db.prepare('SELECT mood,COUNT(*) count FROM sounds GROUP BY mood ORDER BY count DESC').all();
     res.json({ summary, moods });
