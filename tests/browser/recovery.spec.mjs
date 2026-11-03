@@ -64,7 +64,7 @@ test('keyboard selection retains focus on its recording control',async({page})=>
 test('field notes preserve failed submissions and display user text safely', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#notes-form')).toBeVisible();
-  await page.locator('#notes-form input').fill('Тестовый автор');
+  await page.locator('#notes-form input[name=author]').fill('Тестовый автор');
   await page.locator('#notes-form textarea').fill('<img src=x onerror=alert(1)>');
   await page.route('**/api/notes', route => route.fulfill({status:503,contentType:'application/json',body:'{}'}));
   await page.locator('#notes-form button').click();
