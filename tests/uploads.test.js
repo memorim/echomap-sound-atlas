@@ -60,6 +60,8 @@ test("uploads require author identity, validate media and remain private until m
       .send(wav());
     assert.equal(made.status, 201);
     const id = made.body.id;
+    const hiddenStats=(await request(app).get('/api/stats')).body;
+    assert.equal(hiddenStats.moods.reduce((total,mood)=>total+mood.count,0),hiddenStats.summary.recordings);
     assert.equal((await request(app).get("/api/audio/" + id)).status, 404);
     assert.equal((await request(app).get("/api/sounds/" + id)).status, 404);
     assert.equal(
@@ -95,6 +97,9 @@ test("uploads require author identity, validate media and remain private until m
       ).status,
       200,
     );
+    const approvedStats=(await request(app).get('/api/stats')).body;
+    assert.equal(approvedStats.summary.recordings,hiddenStats.summary.recordings+1);
+    assert.equal(approvedStats.moods.reduce((total,mood)=>total+mood.count,0),approvedStats.summary.recordings);
     assert.equal((await request(app).get("/api/audio/" + id)).status, 200);
     assert.equal(
       (await request(app).get("/api/sounds/" + id)).body.duration,

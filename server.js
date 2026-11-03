@@ -157,7 +157,7 @@ export function createApp(
     };
     const moods = db
       .prepare(
-        "SELECT mood,COUNT(*) count FROM sounds GROUP BY mood ORDER BY count DESC",
+        "SELECT mood,COUNT(*) count FROM sounds WHERE id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved') GROUP BY mood ORDER BY count DESC",
       )
       .all();
     res.json({ summary, moods });
