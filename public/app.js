@@ -243,7 +243,7 @@ document.querySelectorAll("[data-mood]").forEach(
 );
 const notesPanel = document.createElement('section');
 notesPanel.className = 'field-notes';
-notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
+notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label>Ключ автора для публичного сервера <input name="accessKey" type="password" autocomplete="off"></label><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
 document.querySelector('main').append(notesPanel);
 const notesForm = document.querySelector('#notes-form');
 let noteSoundId, notesRequest = 0;
@@ -286,13 +286,15 @@ notesForm.onsubmit = async (event) => {
   submit.disabled = true;
   const draft = notesForm.elements.note.value;
   try {
-    const response = await fetch('/api/notes', { method:'POST', headers:{'Content-Type':'application/json'},
+    const response = await fetch('/api/notes', { method:'POST', headers:{'Content-Type':'application/json',...(notesForm.elements.accessKey.value?{Authorization:'Bearer '+notesForm.elements.accessKey.value}:{})},
       body:JSON.stringify({soundId, author:notesForm.elements.author.value, note:draft}) });
     if (!response.ok) throw new Error();
+    const receipt = await response.json();
     drafts.delete(soundId);
     if (noteSoundId === soundId) {
       if (notesForm.elements.note.value === draft) notesForm.elements.note.value = '';
       await loadNotes(soundId);
+      if(receipt.status==='pending') document.querySelector('#notes-status').textContent='Заметка отправлена на модерацию.';
     }
   } catch {
     if (noteSoundId === soundId) document.querySelector('#notes-status').textContent = 'Не удалось сохранить заметку. Текст сохранён в форме; повторите отправку.';

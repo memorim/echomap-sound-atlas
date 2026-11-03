@@ -102,6 +102,29 @@ function clearPreviews() {
 }
 window.addEventListener("pagehide", clearPreviews);
 async function load() {
+  const notes = await api("/api/owner/notes");
+  table(
+    $("notes"),
+    ["Автор", "Запись", "Заметка", "Решение"],
+    notes.map((n) => {
+      const actions = el("div");
+      for (const [label, status] of [
+        ["Одобрить", "approved"],
+        ["Отклонить", "rejected"],
+      ])
+        actions.append(
+          action(label, async () => {
+            await api("/api/owner/notes/" + n.id, {
+              method: "PATCH",
+              body: JSON.stringify({ status }),
+            });
+            await load();
+            message("Решение сохранено.");
+          }),
+        );
+      return [n.author, n.sound_id, n.note, actions];
+    }),
+  );
   const rows = await api("/api/owner/uploads");
   clearPreviews();
   table(

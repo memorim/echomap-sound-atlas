@@ -1,18 +1,21 @@
-import {initializeUploads,uploadRoutes} from "./uploads.js";
-import {ownerAccess,publicOrigin} from "./owner-access.js";
-import express from 'express';
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { z } from 'zod';
+import { consumeBudget, initializeBudgets } from "./request-budget.js";
+import { initializeUploads, uploadRoutes, authorAccess } from "./uploads.js";
+import { ownerAccess, publicOrigin } from "./owner-access.js";
+import express from "express";
+import { DatabaseSync } from "node:sqlite";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const recordings = JSON.parse(readFileSync(resolve(root, 'public/audio/recordings.json'), 'utf8'));
-const withRecording = sound => ({ ...sound, ...recordings[sound.id] });
+const recordings = JSON.parse(
+  readFileSync(resolve(root, "public/audio/recordings.json"), "utf8"),
+);
+const withRecording = (sound) => ({ ...sound, ...recordings[sound.id] });
 
-export function createDb(file = resolve(root, 'data', 'echomap.db')) {
-  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+export function createDb(file = resolve(root, "data", "echomap.db")) {
+  if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec(`
     CREATE TABLE IF NOT EXISTS sounds (
@@ -27,8 +30,9 @@ export function createDb(file = resolve(root, 'data', 'echomap.db')) {
       FOREIGN KEY(sound_id) REFERENCES sounds(id)
     );
   `);
-  const { count } = db.prepare('SELECT COUNT(*) count FROM sounds').get();
-  if (!count) db.exec(`
+  const { count } = db.prepare("SELECT COUNT(*) count FROM sounds").get();
+  if (!count)
+    db.exec(`
     INSERT INTO sounds VALUES
       (1,'Утро на Яузе','Москва','Басманный','calm',55.759,37.665,84,'#9fc7bd','Вода под мостом, редкие велосипеды и первый трамвай.',174,'water','2026-06-12T05:42:00'),
       (2,'Подземный переход','Москва','Тверской','pulse',55.765,37.605,46,'#e87548','Шаги, объявления и длинное эхо гранитного коридора.',118,'echo','2026-06-18T18:21:00'),
@@ -42,54 +46,205 @@ export function createDb(file = resolve(root, 'data', 'echomap.db')) {
       (1,'Марина','Лучше слушать в наушниках: справа появляется звон велосипеда.','2026-06-13T10:00:00'),
       (3,'Антон','Запись сделана прямо во время летней грозы.','2026-06-28T08:40:00');
   `);
+  const columns = db
+    .prepare("PRAGMA table_info(field_notes)")
+    .all()
+    .map((c) => c.name);
+  if (!columns.includes("status"))
+    db.exec(
+      "ALTER TABLE field_notes ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'",
+    );
+  initializeBudgets(db);
   initializeUploads(db);
   return db;
 }
 
 const noteSchema = z.object({
-  soundId: z.number().int().positive(), author: z.string().trim().min(2).max(50),
+  soundId: z.number().int().positive(),
+  author: z.string().trim().min(2).max(50),
   note: z.string().trim().min(5).max(300),
 });
 
-export function createApp(db = createDb(), {uploadDirectory=resolve(root,"data","uploads")}={}) {
+export function createApp(
+  db = createDb(),
+  { uploadDirectory = resolve(root, "data", "uploads") } = {},
+) {
   const app = express();
-  const hosted=publicOrigin();
-  app.use('/api',(req,res,next)=>{if(hosted ? req.get('host')!==hosted.host : !['localhost','127.0.0.1','[::1]'].includes(req.hostname))return res.status(403).json({message:'Host not allowed'});if(!['GET','HEAD','OPTIONS'].includes(req.method)&&(req.get('sec-fetch-site')==='cross-site'||(req.get('origin')&&req.get('origin')!==(hosted?.origin||`${req.protocol}://${req.get('host')}`))))return res.status(403).json({message:'Origin not allowed'});next();});
-  app.use(express.json({limit:'16kb'}));
-  uploadRoutes(app,db,{directory:uploadDirectory,moderator:ownerAccess()});
-  const decorate=sound=>{const row=db.prepare('SELECT sound_id FROM user_recordings WHERE sound_id=?').get(sound.id);return row?{...sound,audio_url:'/api/audio/'+sound.id,source_url:'/api/sounds/'+sound.id}:withRecording(sound);};
-  app.get('/api/sounds', (req, res) => {
-    const city = String(req.query.city || 'all');
-    const mood = String(req.query.mood || 'all');
-    const clauses = ["id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')"]; const params = {};
-    if (city !== 'all') { clauses.push('city=$city'); params.$city = city; }
-    if (mood !== 'all') { clauses.push('mood=$mood'); params.$mood = mood; }
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    res.json(db.prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`).all(params).map(decorate));
+  const hosted = publicOrigin();
+  app.use("/api", (req, res, next) => {
+    if (
+      hosted
+        ? req.get("host") !== hosted.host
+        : !["localhost", "127.0.0.1", "[::1]"].includes(req.hostname)
+    )
+      return res.status(403).json({ message: "Host not allowed" });
+    if (
+      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+      (req.get("sec-fetch-site") === "cross-site" ||
+        (req.get("origin") &&
+          req.get("origin") !==
+            (hosted?.origin || `${req.protocol}://${req.get("host")}`)))
+    )
+      return res.status(403).json({ message: "Origin not allowed" });
+    next();
   });
-  app.get('/api/sounds/:id', (req, res) => {
-    const sound = db.prepare("SELECT * FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')").get(Number(req.params.id));
-    if (!sound) return res.status(404).json({ message: 'Запись не найдена' });
-    const notes = db.prepare('SELECT * FROM field_notes WHERE sound_id=? ORDER BY created_at DESC').all(sound.id);
+  app.use(express.json({ limit: "16kb" }));
+  uploadRoutes(app, db, {
+    directory: uploadDirectory,
+    moderator: ownerAccess(),
+  });
+  const decorate = (sound) => {
+    const row = db
+      .prepare("SELECT sound_id FROM user_recordings WHERE sound_id=?")
+      .get(sound.id);
+    return row
+      ? {
+          ...sound,
+          audio_url: "/api/audio/" + sound.id,
+          source_url: "/api/sounds/" + sound.id,
+        }
+      : withRecording(sound);
+  };
+  app.get("/api/sounds", (req, res) => {
+    const city = String(req.query.city || "all");
+    const mood = String(req.query.mood || "all");
+    const clauses = [
+      "id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
+    ];
+    const params = {};
+    if (city !== "all") {
+      clauses.push("city=$city");
+      params.$city = city;
+    }
+    if (mood !== "all") {
+      clauses.push("mood=$mood");
+      params.$mood = mood;
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    res.json(
+      db
+        .prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`)
+        .all(params)
+        .map(decorate),
+    );
+  });
+  app.get("/api/sounds/:id", (req, res) => {
+    const sound = db
+      .prepare(
+        "SELECT * FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
+      )
+      .get(Number(req.params.id));
+    if (!sound) return res.status(404).json({ message: "Запись не найдена" });
+    const notes = db
+      .prepare(
+        "SELECT * FROM field_notes WHERE sound_id=? AND status='approved' ORDER BY created_at DESC",
+      )
+      .all(sound.id);
     res.json({ ...decorate(sound), notes });
   });
-  app.get('/api/stats', (_req, res) => {
-    const sounds = db.prepare("SELECT * FROM sounds WHERE id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')").all().map(decorate);
-    const summary = { recordings: sounds.length, cities: new Set(sounds.map(s => s.city)).size, minutes: Math.round(sounds.reduce((total,s) => total + s.duration, 0) / 6) / 10 };
-    const moods = db.prepare('SELECT mood,COUNT(*) count FROM sounds GROUP BY mood ORDER BY count DESC').all();
+  app.get("/api/stats", (_req, res) => {
+    const sounds = db
+      .prepare(
+        "SELECT * FROM sounds WHERE id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
+      )
+      .all()
+      .map(decorate);
+    const summary = {
+      recordings: sounds.length,
+      cities: new Set(sounds.map((s) => s.city)).size,
+      minutes:
+        Math.round(sounds.reduce((total, s) => total + s.duration, 0) / 6) / 10,
+    };
+    const moods = db
+      .prepare(
+        "SELECT mood,COUNT(*) count FROM sounds GROUP BY mood ORDER BY count DESC",
+      )
+      .all();
     res.json({ summary, moods });
   });
-  app.post('/api/notes', (req, res) => {
-    const parsed = noteSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: 'Проверьте текст заметки' });
-    const sound = db.prepare('SELECT id FROM sounds WHERE id=?').get(parsed.data.soundId);
-    if (!sound) return res.status(404).json({ message: 'Запись не найдена' });
-    const out = db.prepare('INSERT INTO field_notes(sound_id,author,note,created_at) VALUES(?,?,?,?)').run(parsed.data.soundId, parsed.data.author, parsed.data.note, new Date().toISOString());
-    res.status(201).json({ id: Number(out.lastInsertRowid) });
+  app.get("/api/owner/notes", ownerAccess(), (_req, res) =>
+    res.json(
+      db
+        .prepare(
+          "SELECT * FROM field_notes WHERE status='pending' ORDER BY id DESC LIMIT 100",
+        )
+        .all(),
+    ),
+  );
+  app.patch("/api/owner/notes/:id", ownerAccess(), (req, res) => {
+    if (!["approved", "rejected"].includes(req.body.status))
+      return res.status(400).json({ message: "Неверный статус" });
+    const out = db
+      .prepare(
+        "UPDATE field_notes SET status=? WHERE id=? AND status='pending'",
+      )
+      .run(req.body.status, Number(req.params.id));
+    res.status(out.changes ? 200 : 409).json({ ok: !!out.changes });
   });
-  app.use(express.static(resolve(root, 'public')));
-  app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(resolve(root, 'public', 'index.html')));
-  app.use((error,_req,res,_next)=>{const status=error?.type==='entity.too.large'?413:error instanceof SyntaxError?400:503;if(status===503)console.error({event:'request_error',error:String(error)});res.status(status).json({message:'Не удалось обработать запрос'});});return app;
+  app.post(
+    "/api/notes",
+    (req, res, next) => (hosted ? authorAccess(req, res, next) : next()),
+    (req, res) => {
+      const budget = consumeBudget(
+        db,
+        "notes:" + (req.authorId || "local"),
+        10,
+        Date.now(),
+      );
+      if (!budget.allowed)
+        return res
+          .set("Retry-After", String(budget.retryAfter))
+          .status(429)
+          .json({ message: "Слишком много заметок. Повторите позже" });
+      const parsed = noteSchema.safeParse(req.body);
+      if (!parsed.success)
+        return res.status(400).json({ message: "Проверьте текст заметки" });
+      const sound = db
+        .prepare(
+          "SELECT id FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
+        )
+        .get(parsed.data.soundId);
+      if (!sound) return res.status(404).json({ message: "Запись не найдена" });
+      const out = db
+        .prepare(
+          "INSERT INTO field_notes(sound_id,author,note,created_at,status) VALUES(?,?,?,?,?)",
+        )
+        .run(
+          parsed.data.soundId,
+          req.authorId || parsed.data.author,
+          parsed.data.note,
+          new Date().toISOString(),
+          hosted ? "pending" : "approved",
+        );
+      res
+        .status(201)
+        .json({
+          id: Number(out.lastInsertRowid),
+          status: hosted ? "pending" : "approved",
+        });
+    },
+  );
+  app.use(express.static(resolve(root, "public")));
+  app.get(/^(?!\/api).*/, (_req, res) =>
+    res.sendFile(resolve(root, "public", "index.html")),
+  );
+  app.use((error, _req, res, _next) => {
+    const status =
+      error?.type === "entity.too.large"
+        ? 413
+        : error instanceof SyntaxError
+          ? 400
+          : 503;
+    if (status === 503)
+      console.error({ event: "request_error", error: String(error) });
+    res.status(status).json({ message: "Не удалось обработать запрос" });
+  });
+  return app;
 }
 
-if (process.env.NODE_ENV !== 'test') createApp().listen(process.env.PORT || 4700,process.env.HOST||'127.0.0.1', () => console.log('EchoMap: http://localhost:4700'));
+if (process.env.NODE_ENV !== "test")
+  createApp().listen(
+    process.env.PORT || 4700,
+    process.env.HOST || "127.0.0.1",
+    () => console.log("EchoMap: http://localhost:4700"),
+  );

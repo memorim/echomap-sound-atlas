@@ -1,3 +1,23 @@
+export const authorAccess = (req, res, next) => {
+  try {
+    const registry = JSON.parse(process.env.APP_UPLOADERS || "{}"),
+      header = req.get("authorization") || "",
+      token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const name = registry[createHash("sha256").update(token).digest("hex")];
+    if (
+      token.length < 32 ||
+      token.length > 256 ||
+      typeof name !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,64}$/.test(name)
+    )
+      return res.status(401).json({ message: "Войдите с ключом автора" });
+    req.authorId = name;
+    next();
+  } catch {
+    return res.status(503).json({ message: "Доступ авторов не настроен" });
+  }
+};
+
 import express from "express";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync, unlinkSync } from "node:fs";
@@ -57,25 +77,7 @@ export function initializeUploads(db) {
 }
 export function uploadRoutes(app, db, { directory, moderator }) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const user = (req, res, next) => {
-    try {
-      const registry = JSON.parse(process.env.APP_UPLOADERS || "{}"),
-        header = req.get("authorization") || "",
-        token = header.startsWith("Bearer ") ? header.slice(7) : "";
-      const name = registry[createHash("sha256").update(token).digest("hex")];
-      if (
-        token.length < 32 ||
-        token.length > 256 ||
-        typeof name !== "string" ||
-        !/^[a-zA-Z0-9_-]{1,64}$/.test(name)
-      )
-        return res.status(401).json({ message: "Войдите с ключом автора" });
-      req.authorId = name;
-      next();
-    } catch {
-      return res.status(503).json({ message: "Доступ авторов не настроен" });
-    }
-  };
+  const user = authorAccess;
   app.post(
     "/api/uploads",
     user,
@@ -92,11 +94,9 @@ export function uploadRoutes(app, db, { directory, moderator }) {
         .strict()
         .safeParse(req.query);
       if (!parsed.success)
-        return res
-          .status(400)
-          .json({
-            message: "Проверьте название, город, координаты и лицензию CC0",
-          });
+        return res.status(400).json({
+          message: "Проверьте название, город, координаты и лицензию CC0",
+        });
       let duration;
       try {
         duration = wavDuration(req.body);
