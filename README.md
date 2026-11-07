@@ -104,3 +104,7 @@ GET /api/owner/uploads и PATCH /api/owner/uploads/:id требуют Bearer-т�
 ### Кабинет владельца
 
 При серверном запуске откройте `/owner.html`: модерация записей. Вход по `APP_OWNER_TOKEN`; ключ не сохраняется в localStorage или URL и удаляется при выходе. На GitHub Pages кабинет не подключён к серверной базе.
+
+### Постоянный диск и полная резервная копия
+
+`ECHOMAP_DATA_DIRECTORY` задаёт общий путь для SQLite и пользовательских WAV. [Инструкция по архивированию и восстановлению](docs/PERSISTENT_STORAGE.md) описывает перенос данных и команды `node scripts/archive.mjs backup|restore SOURCE NEW_DESTINATION`. Архив включает заметки, модерацию и все связанные WAV; восстановление проверяет контрольные суммы и создаёт новый каталог.

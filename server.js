@@ -1,6 +1,7 @@
 import { consumeBudget, initializeBudgets } from "./request-budget.js";
 import { initializeUploads, uploadRoutes, authorAccess } from "./uploads.js";
 import { ownerAccess, publicOrigin } from "./owner-access.js";
+import { dataDirectory } from "./storage.js";
 import express from "express";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -14,7 +15,7 @@ const recordings = JSON.parse(
 );
 const withRecording = (sound) => ({ ...sound, ...recordings[sound.id] });
 
-export function createDb(file = resolve(root, "data", "echomap.db")) {
+export function createDb(file = resolve(dataDirectory(), "echomap.db")) {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec(`
@@ -67,7 +68,7 @@ const noteSchema = z.object({
 
 export function createApp(
   db = createDb(),
-  { uploadDirectory = resolve(root, "data", "uploads") } = {},
+  { uploadDirectory = resolve(dataDirectory(), "uploads") } = {},
 ) {
   const app = express();
   const hosted = publicOrigin();
