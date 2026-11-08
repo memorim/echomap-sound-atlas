@@ -1,0 +1,13 @@
+name: Free uptime check
+on:
+  schedule:
+    - cron: "27 * * * *"
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check public service
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 https://memorim-echomap.onrender.com/ >/dev/null
