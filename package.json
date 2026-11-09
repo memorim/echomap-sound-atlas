@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1164.0",
+    "@neon/functions": "0.11.0",
     "express": "^5.3.0",
     "leaflet": "1.9.4",
     "pg": "8.20.0",
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
+    "esbuild": "0.28.2",
+    "fflate": "0.8.3",
     "supertest": "^7.3.1"
   },
   "packageManager": "pnpm@11.7.0",

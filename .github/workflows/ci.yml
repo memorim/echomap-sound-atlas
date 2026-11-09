@@ -36,6 +36,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level=high
       - run: pnpm test
+      - run: node scripts/build-backup.mjs
       - run: pnpm test:contract
       - run: pnpm test:upgrade
       - run: pnpm exec playwright install --with-deps --only-shell chromium
