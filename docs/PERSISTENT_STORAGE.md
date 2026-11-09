@@ -42,3 +42,38 @@ Repository tests exercise notes, all moderation states, byte-for-byte restored
 audio, corrupted checksums, missing files and refusal to overwrite existing data.
 The persistent disk, scheduler and independent storage still need installation
 on the actual server; adding the configuration does not provision hosting.
+
+
+## Free external PostgreSQL and private audio storage
+
+Hosted mode supports `DATABASE_URL` together with `ECHOMAP_AUDIO_BUCKET` and
+AWS-standard `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and
+`AWS_SECRET_ACCESS_KEY`. Store credentials only in the hosting environment.
+Use a **private** bucket. PostgreSQL metadata and object storage must be configured
+together; startup refuses a mixed PostgreSQL/local-audio setup. Local SQLite mode
+and the archive commands above remain available for self-hosted installations.
+
+The PostgreSQL adapter verifies remote TLS certificates and initializes tables
+under a startup lock. It seeds demo rows only in an empty database. This is not an
+SQLite migration: existing installations must migrate both metadata and audio
+before switching. The current hosted demo was confirmed to contain test data only.
+
+Upload quotas remain 100 files / 100 MiB per author and 1 GiB across the app.
+A transaction-wide advisory lock makes quota checks atomic across replicas.
+Only approved media is returned through public audio routes; owner previews need
+the owner token. Storage credentials and object URLs never reach the browser.
+Range requests are forwarded for seeking. If a database commit has an uncertain
+outcome, the private object is retained for reconciliation instead of risking a
+broken committed reference. Review unreferenced private objects separately.
+
+Neon Free currently includes 1 GB PostgreSQL and 5 GB object storage per project;
+no paid disk or plan is required for this bounded demo. Account-wide limits,
+network transfer and compute quotas still apply. See
+https://neon.com/docs/introduction/plans and
+https://neon.com/docs/storage/s3-compatibility (checked 2026-11-09).
+
+CI uses PostgreSQL 16 to verify persisted notes, budgets, moderation, private audio,
+byte ranges, reconnects and concurrent quota enforcement. Deployment and live
+restart verification are tracked separately; adding this code alone does not
+prove production persistence. The SQLite archive command does not back up this
+external mode: a PostgreSQL plus object snapshot is still required.
