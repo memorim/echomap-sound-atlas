@@ -1,0 +1,14 @@
+import {build} from 'esbuild';
+import {zipSync} from 'fflate';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+await mkdir('.neon-build',{recursive:true});
+const bundle=await build({entryPoints:['scheduled-backup.js'],bundle:true,platform:'node',target:'node24',format:'esm',write:false,minify:true,external:['pg-native'],banner:{js:"import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);"}});
+await writeFile('.neon-build/backup.mjs',bundle.outputFiles[0].contents);
+const compiled=await import(pathToFileURL(resolve('.neon-build/backup.mjs')));
+const response=await compiled.default.fetch(new Request('https://build-check.invalid/cron',{method:'POST'}));
+if(response.status!==401)throw new Error('Anonymous backup invocation must fail');
+const zip=zipSync({'index.mjs':bundle.outputFiles[0].contents},{level:9});
+await writeFile('.neon-build/backup.zip',zip);
+console.log(JSON.stringify({artifact:'.neon-build/backup.zip',bytes:zip.length}));
