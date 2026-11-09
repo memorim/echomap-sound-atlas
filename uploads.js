@@ -1,3 +1,4 @@
+import { localAudioStore } from "./audio-store.js";
 export const authorAccess = (req, res, next) => {
   try {
     const registry = JSON.parse(process.env.APP_UPLOADERS || "{}"),
@@ -20,8 +21,6 @@ export const authorAccess = (req, res, next) => {
 
 import express from "express";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync, unlinkSync } from "node:fs";
-import { resolve } from "node:path";
 import { z } from "zod";
 export function wavDuration(buffer) {
   if (
@@ -75,14 +74,13 @@ export function initializeUploads(db) {
     `CREATE TABLE IF NOT EXISTS user_recordings(sound_id INTEGER PRIMARY KEY,owner_id TEXT NOT NULL,file TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'pending',size INTEGER NOT NULL,created_at TEXT NOT NULL);`,
   );
 }
-export function uploadRoutes(app, db, { directory, moderator }) {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+export function uploadRoutes(app, db, { directory, moderator, store = localAudioStore(directory) }) {
   const user = authorAccess;
   app.post(
     "/api/uploads",
     user,
     express.raw({ type: "audio/wav", limit: "20mb" }),
-    (req, res, next) => {
+    async (req, res, next) => {
       const parsed = z
         .object({
           title: z.string().trim().min(3).max(100),
@@ -104,12 +102,11 @@ export function uploadRoutes(app, db, { directory, moderator }) {
         return res.status(400).json({ message: error.message });
       }
       const file = randomUUID() + ".wav",
-        path = resolve(directory, file),
         now = new Date().toISOString();
       let written = false;
-      db.exec("BEGIN IMMEDIATE");
       try {
-        const quota = db
+        const result = await db.transaction(async () => {
+        const quota = await db
           .prepare(
             "SELECT count(*) count,COALESCE(sum(size),0) bytes FROM user_recordings WHERE owner_id=?",
           )
@@ -117,19 +114,18 @@ export function uploadRoutes(app, db, { directory, moderator }) {
         if (
           quota.count >= 100 ||
           quota.bytes + req.body.length > 100 * 1024 * 1024 ||
-          db
+          (await db
             .prepare("SELECT COALESCE(sum(size),0) bytes FROM user_recordings")
-            .get().bytes +
+            .get()).bytes +
             req.body.length >
             1024 * 1024 * 1024
         ) {
-          db.exec("ROLLBACK");
-          return res.status(429).json({ message: "Исчерпана квота хранилища" });
+          return null;
         }
-        writeFileSync(path, req.body, { flag: "wx", mode: 0o600 });
+        await store.put(file, req.body);
         written = true;
         const p = parsed.data;
-        const out = db
+        const out = await db
           .prepare(
             "INSERT INTO sounds(title,city,district,mood,lat,lng,duration,color,description,frequency,texture,recorded_at) VALUES(?,?,?,'calm',?,?,?,'#9fc7bd',?,0,'user',?)",
           )
@@ -143,40 +139,41 @@ export function uploadRoutes(app, db, { directory, moderator }) {
             "Запись автора, опубликована по CC0",
             now,
           );
-        db.prepare(
+        await db.prepare(
           "INSERT INTO user_recordings(sound_id,owner_id,file,size,created_at) VALUES(?,?,?,?,?)",
         ).run(out.lastInsertRowid, req.authorId, file, req.body.length, now);
-        db.exec("COMMIT");
-        res
-          .status(201)
-          .json({ id: Number(out.lastInsertRowid), status: "pending" });
+        return { id: Number(out.lastInsertRowid), status: "pending" };
+        });
+        if (!result) return res.status(429).json({ message: "Исчерпана квота хранилища" });
+        res.status(201).json(result);
       } catch (error) {
-        if (db.isTransaction) db.exec("ROLLBACK");
-        if (written) unlinkSync(path);
+        // An uncertain COMMIT outcome may already reference this object. Keep it
+        // private for reconciliation rather than risk deleting committed audio.
+        if (written) console.error({ event: "upload_reconciliation_required", file });
         next(error);
       }
     },
   );
-  app.get("/api/uploads/mine", user, (req, res) =>
+  app.get("/api/uploads/mine", user, async (req, res) =>
     res.json(
-      db
+      await db
         .prepare(
           "SELECT sound_id,status,created_at FROM user_recordings WHERE owner_id=? ORDER BY sound_id DESC",
         )
         .all(req.authorId),
     ),
   );
-  app.get("/api/owner/uploads", moderator, (req, res) =>
+  app.get("/api/owner/uploads", moderator, async (req, res) =>
     res.json(
-      db
+      await db
         .prepare(
           "SELECT u.sound_id,u.owner_id,u.status,s.title,s.city FROM user_recordings u JOIN sounds s ON s.id=u.sound_id ORDER BY u.sound_id DESC LIMIT 100",
         )
         .all(),
     ),
   );
-  app.get("/api/owner/uploads/:id/audio", moderator, (req, res) => {
-    const row = db
+  app.get("/api/owner/uploads/:id/audio", moderator, async (req, res) => {
+    const row = await db
       .prepare("SELECT file FROM user_recordings WHERE sound_id=?")
       .get(Number(req.params.id));
     if (!row) return res.status(404).end();
@@ -185,20 +182,20 @@ export function uploadRoutes(app, db, { directory, moderator }) {
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     });
-    res.sendFile(resolve(directory, row.file));
+    await store.send(req, res, row.file);
   });
-  app.patch("/api/owner/uploads/:id", moderator, (req, res) => {
+  app.patch("/api/owner/uploads/:id", moderator, async (req, res) => {
     if (!["approved", "rejected"].includes(req.body.status))
       return res.status(400).json({ message: "Неверный статус" });
-    const out = db
+    const out = await db
       .prepare(
         "UPDATE user_recordings SET status=? WHERE sound_id=? AND status='pending'",
       )
       .run(req.body.status, Number(req.params.id));
     res.status(out.changes ? 200 : 409).json({ ok: !!out.changes });
   });
-  app.get("/api/audio/:id", (req, res) => {
-    const row = db
+  app.get("/api/audio/:id", async (req, res) => {
+    const row = await db
       .prepare(
         "SELECT file FROM user_recordings WHERE sound_id=? AND status='approved'",
       )
@@ -209,6 +206,7 @@ export function uploadRoutes(app, db, { directory, moderator }) {
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     });
-    res.sendFile(resolve(directory, row.file));
+    await store.send(req, res, row.file);
   });
 }
+

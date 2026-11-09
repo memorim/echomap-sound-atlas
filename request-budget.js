@@ -1,6 +1,6 @@
 // Fixed-window budgets are persisted so all workers and restarts share attempts.
-export function consumeBudget(db, key, maximum, now, windowMs = 60000) {
-  const row = db
+export async function consumeBudget(db, key, maximum, now, windowMs = 60000) {
+  const row = await db
     .prepare(
       `INSERT INTO request_budgets(key,count,reset_at) VALUES(?,1,?)
     ON CONFLICT(key) DO UPDATE SET
@@ -19,3 +19,4 @@ export function initializeBudgets(db) {
     "CREATE TABLE IF NOT EXISTS request_budgets(key TEXT PRIMARY KEY,count INTEGER NOT NULL,reset_at INTEGER NOT NULL)",
   );
 }
+

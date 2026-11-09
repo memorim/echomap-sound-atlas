@@ -1,3 +1,6 @@
+import { seedSql } from "./seed.js";
+import { adaptDatabase, createPostgres } from "./database.js";
+import { createAudioStore } from "./audio-store.js";
 import { consumeBudget, initializeBudgets } from "./request-budget.js";
 import { initializeUploads, uploadRoutes, authorAccess } from "./uploads.js";
 import { ownerAccess, publicOrigin } from "./owner-access.js";
@@ -34,18 +37,7 @@ export function createDb(file = resolve(dataDirectory(), "echomap.db")) {
   const { count } = db.prepare("SELECT COUNT(*) count FROM sounds").get();
   if (!count)
     db.exec(`
-    INSERT INTO sounds VALUES
-      (1,'Утро на Яузе','Москва','Басманный','calm',55.759,37.665,84,'#9fc7bd','Вода под мостом, редкие велосипеды и первый трамвай.',174,'water','2026-06-12T05:42:00'),
-      (2,'Подземный переход','Москва','Тверской','pulse',55.765,37.605,46,'#e87548','Шаги, объявления и длинное эхо гранитного коридора.',118,'echo','2026-06-18T18:21:00'),
-      (3,'Дождь по оранжерее','Москва','Останкино','rain',55.829,37.609,112,'#748ba7','Крупные капли на стеклянной крыше и шелест листьев.',232,'rain','2026-06-27T14:08:00'),
-      (4,'Последний трамвай','Москва','Сокольники','night',55.792,37.678,73,'#6c5f91','Металл на повороте, пустая остановка и гул проводов.',92,'metal','2026-07-01T23:47:00'),
-      (5,'Двор после школы','Москва','Хамовники','human',55.733,37.574,61,'#e5b85c','Мяч ударяется о стену, кто-то зовёт домой.',208,'voices','2026-06-05T16:34:00'),
-      (6,'Ветер в высотках','Москва','Пресня','wind',55.752,37.539,97,'#7b9c7b','Воздушные потоки между башнями и далёкий городской шум.',146,'wind','2026-06-21T20:11:00'),
-      (7,'Рынок перед закрытием','Стамбул','Кадыкёй','human',40.991,29.027,129,'#d46b53','Складывают ящики, звенят стаканы, продавцы прощаются.',196,'voices','2026-05-22T19:03:00'),
-      (8,'Портовый туман','Хельсинки','Катаянокка','calm',60.167,24.968,105,'#88a9b4','Гудок парома растворяется в тумане над водой.',82,'water','2026-05-14T06:18:00');
-    INSERT INTO field_notes(sound_id,author,note,created_at) VALUES
-      (1,'Марина','Лучше слушать в наушниках: справа появляется звон велосипеда.','2026-06-13T10:00:00'),
-      (3,'Антон','Запись сделана прямо во время летней грозы.','2026-06-28T08:40:00');
+    ${seedSql}
   `);
   const columns = db
     .prepare("PRAGMA table_info(field_notes)")
@@ -68,8 +60,9 @@ const noteSchema = z.object({
 
 export function createApp(
   db = createDb(),
-  { uploadDirectory = resolve(dataDirectory(), "uploads") } = {},
+  { uploadDirectory = resolve(dataDirectory(), "uploads"), audioStore } = {},
 ) {
+  db = adaptDatabase(db);
   const app = express();
   const hosted = publicOrigin();
   app.use("/api", (req, res, next) => {
@@ -92,10 +85,11 @@ export function createApp(
   app.use(express.json({ limit: "16kb" }));
   uploadRoutes(app, db, {
     directory: uploadDirectory,
+    store: audioStore,
     moderator: ownerAccess(),
   });
-  const decorate = (sound) => {
-    const row = db
+  const decorate = async (sound) => {
+    const row = await db
       .prepare("SELECT sound_id FROM user_recordings WHERE sound_id=?")
       .get(sound.id);
     return row
@@ -106,7 +100,7 @@ export function createApp(
         }
       : withRecording(sound);
   };
-  app.get("/api/sounds", (req, res) => {
+  app.get("/api/sounds", async (req, res) => {
     const city = String(req.query.city || "all");
     const mood = String(req.query.mood || "all");
     const clauses = [
@@ -123,59 +117,57 @@ export function createApp(
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     res.json(
-      db
+      await Promise.all((await db
         .prepare(`SELECT * FROM sounds ${where} ORDER BY recorded_at DESC`)
-        .all(params)
-        .map(decorate),
+        .all(params)).map(decorate)),
     );
   });
-  app.get("/api/sounds/:id", (req, res) => {
-    const sound = db
+  app.get("/api/sounds/:id", async (req, res) => {
+    const sound = await db
       .prepare(
         "SELECT * FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
       )
       .get(Number(req.params.id));
     if (!sound) return res.status(404).json({ message: "Запись не найдена" });
-    const notes = db
+    const notes = await db
       .prepare(
         "SELECT * FROM field_notes WHERE sound_id=? AND status='approved' ORDER BY created_at DESC",
       )
       .all(sound.id);
-    res.json({ ...decorate(sound), notes });
+    res.json({ ...await decorate(sound), notes });
   });
-  app.get("/api/stats", (_req, res) => {
-    const sounds = db
+  app.get("/api/stats", async (_req, res) => {
+    const sounds = await Promise.all((await db
       .prepare(
         "SELECT * FROM sounds WHERE id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
       )
-      .all()
-      .map(decorate);
+      .all()).map(decorate));
     const summary = {
       recordings: sounds.length,
       cities: new Set(sounds.map((s) => s.city)).size,
       minutes:
         Math.round(sounds.reduce((total, s) => total + s.duration, 0) / 6) / 10,
     };
-    const moods = db
+    const moods = await db
       .prepare(
         "SELECT mood,COUNT(*) count FROM sounds WHERE id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved') GROUP BY mood ORDER BY count DESC",
       )
       .all();
     res.json({ summary, moods });
   });
-  app.get("/api/owner/notes", ownerAccess(), (_req, res) =>
+  app.get("/api/owner/notes", ownerAccess(), async (_req, res) =>
     res.json(
-      db
+      await db
         .prepare(
           "SELECT * FROM field_notes WHERE status='pending' ORDER BY id DESC LIMIT 100",
         )
         .all(),
     ),
   );
-  app.patch("/api/owner/notes/:id", ownerAccess(), (req, res) => {
+  app.patch("/api/owner/notes/:id", ownerAccess(), async (req, res) => {
     if (!["approved", "rejected"].includes(req.body.status))
       return res.status(400).json({ message: "Неверный статус" });
-    const out = db
+    const out = await db
       .prepare(
         "UPDATE field_notes SET status=? WHERE id=? AND status='pending'",
       )
@@ -185,8 +177,8 @@ export function createApp(
   app.post(
     "/api/notes",
     (req, res, next) => (hosted ? authorAccess(req, res, next) : next()),
-    (req, res) => {
-      const budget = consumeBudget(
+    async (req, res) => {
+      const budget = await consumeBudget(
         db,
         "notes:" + (req.authorId || "local"),
         10,
@@ -200,13 +192,13 @@ export function createApp(
       const parsed = noteSchema.safeParse(req.body);
       if (!parsed.success)
         return res.status(400).json({ message: "Проверьте текст заметки" });
-      const sound = db
+      const sound = await db
         .prepare(
           "SELECT id FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
         )
         .get(parsed.data.soundId);
       if (!sound) return res.status(404).json({ message: "Запись не найдена" });
-      const out = db
+      const out = await db
         .prepare(
           "INSERT INTO field_notes(sound_id,author,note,created_at,status) VALUES(?,?,?,?,?)",
         )
@@ -244,8 +236,12 @@ export function createApp(
 }
 
 if (process.env.NODE_ENV !== "test")
-  createApp().listen(
+  createApp(
+    process.env.DATABASE_URL ? await createPostgres() : createDb(),
+    { audioStore: createAudioStore() },
+  ).listen(
     process.env.PORT || 4700,
     process.env.HOST || "127.0.0.1",
     () => console.log("EchoMap: http://localhost:4700"),
   );
+
