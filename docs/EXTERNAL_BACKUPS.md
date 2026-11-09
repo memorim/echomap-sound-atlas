@@ -2,7 +2,10 @@
 
 The scheduled worker belongs to the separate free `portfolio-backups` project.
 Its `echomap-backups` bucket is private. Source database access must use a
-read-only login; the source audio credential needs only `storage:read`.
+read-only login; grant SELECT only on `sounds`, `field_notes`,
+`request_budgets` and `user_recordings`, with CONNECT on the database and USAGE
+on their schema. Do not grant the broad `pg_read_all_data` role. The source audio
+credential needs only `storage:read`.
 
 Each run exports all four PostgreSQL tables in a repeatable-read, read-only
 transaction. Every referenced WAV, including pending and rejected recordings,
@@ -49,6 +52,28 @@ check notes, pending moderation and playback before switching traffic.
 
 ## Rollout evidence
 
-CI covers PostgreSQL restoration, complete media manifests, existing-database
-refusal and corruption that must not publish a verified marker. Live deployment
-and the first scheduled archive are not yet verified in this document.
+CI run `42638814683` passed real PostgreSQL restoration, complete media manifests,
+existing-database refusal, corruption rejection, browser and upgrade checks.
+PR #13 was merged as `87531d08f7c13971b87a92c3e329414da5585669`.
+
+Live verification completed on 2026-11-09 at 14:56:02 UTC:
+
+- Dedicated source role `echomap_backup`: SELECT on the four named tables;
+  INSERT, UPDATE and DELETE denied; no broad `pg_read_all_data` membership.
+- Source object credential has only `storage:read`.
+- Backup function `echomapbackup`, deployment 1, runs in `portfolio-backups`.
+  Unsigned invocation returned HTTP 401.
+- Snapshot contains 9 sounds, 2 notes and 1 uploaded recording, including the
+  marked one-second persistence-check WAV. Metadata: 1772 compressed bytes.
+- Snapshot key: `snapshots/2026-11-09T14-56-01.314Z-483e9d5c2a8464d3.json.gz`
+- Metadata SHA-256:
+  `483e9d5c2a8464d38983141ff15c2babc680017d28d70c588188ab2c115750bf`.
+- The copied WAV was downloaded and verified; PostgreSQL rows were restored into
+  temporary tables and compared. Only then was the verified marker published.
+- Enabled daily trigger `echomap-backup`: `30 0 * * *`, next run
+  2026-11-10 00:30 UTC (03:30 Europe/Moscow). The temporary one-minute initial
+  verification schedule has been replaced.
+
+The first live archive and automated restore comparison succeeded. A subsequent
+unattended nightly run and an interactive recovered app instance have not yet
+been observed. Original owner/uploader secrets are still required separately.

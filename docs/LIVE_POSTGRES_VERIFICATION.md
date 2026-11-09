@@ -27,5 +27,6 @@ The file was uploaded directly to private storage and its test metadata inserted
 for this infrastructure check; this is not a claim of a live author upload or
 owner moderation session. Those application flows are covered by CI.
 
-Independent PostgreSQL-plus-audio backups are a separate stage. The local SQLite
-archive command must not be presented as a backup of this hosted installation.
+Independent PostgreSQL-plus-audio backups are now deployed and the first live
+copy verified; see EXTERNAL_BACKUPS.md. The local SQLite archive command does
+not back up this hosted installation.

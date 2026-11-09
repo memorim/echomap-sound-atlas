@@ -73,7 +73,7 @@ https://neon.com/docs/introduction/plans and
 https://neon.com/docs/storage/s3-compatibility (checked 2026-11-09).
 
 CI uses PostgreSQL 16 to verify persisted notes, budgets, moderation, private audio,
-byte ranges, reconnects and concurrent quota enforcement. Deployment and live
-restart verification are tracked separately; adding this code alone does not
-prove production persistence. The SQLite archive command does not back up this
-external mode: a PostgreSQL plus object snapshot is still required.
+byte ranges, reconnects and concurrent quota enforcement. Live restart verification is recorded in
+LIVE_POSTGRES_VERIFICATION.md. The SQLite archive command does not back up this
+external mode; the deployed external worker and its verified database-plus-audio
+archive are documented in EXTERNAL_BACKUPS.md.
