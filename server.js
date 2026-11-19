@@ -1,4 +1,5 @@
 import { seedSql } from "./seed.js";
+import { recordingExtension } from "./recording-format.js";
 import { adaptDatabase, createPostgres } from "./database.js";
 import { createAudioStore } from "./audio-store.js";
 import { consumeBudget, initializeBudgets } from "./request-budget.js";
@@ -90,12 +91,13 @@ export function createApp(
   });
   const decorate = async (sound) => {
     const row = await db
-      .prepare("SELECT sound_id FROM user_recordings WHERE sound_id=?")
+      .prepare("SELECT file FROM user_recordings WHERE sound_id=?")
       .get(sound.id);
     return row
       ? {
           ...sound,
           audio_url: "/api/audio/" + sound.id,
+          audio_format: recordingExtension(row.file).toUpperCase(),
           source_url: "/api/sounds/" + sound.id,
         }
       : withRecording(sound);

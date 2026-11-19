@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import request from "supertest";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 process.env.NODE_ENV = "test";
 const { createDb, createApp } = await import("../server.js");
-function wav() {
-  const b = Buffer.alloc(44 + 16000);
+function wav(seconds = 1) {
+  const b = Buffer.alloc(44 + 16000 * seconds);
   b.write("RIFF");
   b.writeUInt32LE(b.length - 8, 4);
   b.write("WAVEfmt ", 8);
@@ -20,7 +20,7 @@ function wav() {
   b.writeUInt16LE(2, 32);
   b.writeUInt16LE(16, 34);
   b.write("data", 36);
-  b.writeUInt32LE(16000, 40);
+  b.writeUInt32LE(16000 * seconds, 40);
   return b;
 }
 test("uploads require author identity, validate media and remain private until moderation", async () => {
@@ -105,6 +105,16 @@ test("uploads require author identity, validate media and remain private until m
       (await request(app).get("/api/sounds/" + id)).body.duration,
       1,
     );
+    const long = await request(app).post(path).auth(a, { type: "bearer" })
+      .type("audio/wav").send(wav(601));
+    assert.equal(long.status, 201);
+    const mp3 = await request(app).post(path).auth(a, { type: "bearer" })
+      .type("audio/mpeg").send(readFileSync(new URL("../public/audio/1.mp3", import.meta.url)));
+    assert.equal(mp3.status, 201);
+    const media = await request(app).get(`/api/owner/uploads/${mp3.body.id}/audio`)
+      .auth("z".repeat(40), { type: "bearer" }).set("Range", "bytes=0-9");
+    assert.equal(media.status, 206);
+    assert.equal(media.headers["content-type"], "audio/mpeg");
   } finally {
     if (old === undefined) delete process.env.APP_UPLOADERS;
     else process.env.APP_UPLOADERS = old;

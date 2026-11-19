@@ -4,7 +4,10 @@ import { mkdirSync, lstatSync, existsSync, readFileSync, writeFileSync,
   copyFileSync, renameSync, rmSync, chmodSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 
-const audioName = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.wav$/;
+import { maxRecordingBytes, recordingExtension } from "./recording-format.js";
+const validAudioName = (name) => {
+  try { return Boolean(recordingExtension(name)); } catch { return false; }
+};
 function regular(path) {
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Expected a regular file");
@@ -28,12 +31,12 @@ function validateDatabase(db) {
 }
 function recordings(db) {
   const rows = db.prepare("SELECT file,size FROM user_recordings ORDER BY file").all();
-  if (rows.some(row => !audioName.test(row.file) || !Number.isSafeInteger(row.size) || row.size < 1 || row.size > 20 * 1024 * 1024))
+  if (rows.some(row => !validAudioName(row.file) || !Number.isSafeInteger(row.size) || row.size < 1 || row.size > maxRecordingBytes))
     throw new Error("Invalid uploaded recording metadata");
   return rows;
 }
 
-/** Snapshot the database first, then its immutable referenced WAV files. */
+/** Snapshot the database first, then its immutable referenced audio files. */
 export async function backupArchive(sourceDirectory, destinationDirectory) {
   const source = resolve(sourceDirectory), destination = resolve(destinationDirectory);
   directory(source);
@@ -81,7 +84,7 @@ export async function restoreArchive(snapshotDirectory, destinationDirectory) {
       typeof manifest.files !== "object" || !Object.hasOwn(manifest.files, "echomap.db"))
     throw new Error("Invalid archive manifest");
   for (const [file, expected] of Object.entries(manifest.files)) {
-    if (file !== "echomap.db" && !(file.startsWith("uploads/") && audioName.test(file.slice(8))))
+    if (file !== "echomap.db" && !(file.startsWith("uploads/") && validAudioName(file.slice(8))))
       throw new Error("Invalid archive file path");
     if (file.startsWith("uploads/")) directory(join(source, "uploads"));
     const actual = digest(join(source, file));

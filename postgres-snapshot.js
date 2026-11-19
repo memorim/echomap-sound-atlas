@@ -1,3 +1,4 @@
+import { maxRecordingBytes, recordingExtension } from './recording-format.js';
 import { createHash } from 'node:crypto';
 import { schemaSql } from './schema.js';
 export const tables = { sounds: 'id', field_notes: 'id', request_budgets: 'key', user_recordings: 'sound_id' };
@@ -21,7 +22,8 @@ export function validateSnapshot(snapshot) {
  for(const name of Object.keys(tables)) if(!Array.isArray(snapshot.rows[name]) || snapshot.rows[name].length>100000) throw new Error('Invalid rows');
  const audio=new Map();
  for(const entry of snapshot.audio) {
-  if(!/^[a-f0-9-]{36}\.wav$/.test(entry.file) || !/^[a-f0-9]{64}$/.test(entry.sha256) || entry.key!=='audio/'+entry.sha256+'.wav' || !Number.isSafeInteger(entry.bytes) || entry.bytes<44 || entry.bytes>20*1024*1024 || audio.has(entry.file)) throw new Error('Invalid audio manifest');
+  const extension=recordingExtension(entry.file);
+  if(!/^[a-f0-9]{64}$/.test(entry.sha256) || entry.key!=='audio/'+entry.sha256+'.'+extension || !Number.isSafeInteger(entry.bytes) || entry.bytes<1 || entry.bytes>maxRecordingBytes || audio.has(entry.file)) throw new Error('Invalid audio manifest');
   audio.set(entry.file,entry);
  }
  for(const row of snapshot.rows.user_recordings) if(audio.get(row.file)?.bytes!==row.size) throw new Error('Missing recording');

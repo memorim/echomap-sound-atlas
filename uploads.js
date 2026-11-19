@@ -1,4 +1,6 @@
 import { localAudioStore } from "./audio-store.js";
+import { maxRecordingBytes, recordingType, recordingTypes } from "./recording-format.js";
+import { parseBuffer } from "music-metadata";
 export const authorAccess = (req, res, next) => {
   try {
     const registry = JSON.parse(process.env.APP_UPLOADERS || "{}"),
@@ -65,9 +67,8 @@ export function wavDuration(buffer) {
   )
     throw new Error("Поддерживается PCM WAV: 1–2 канала, 8–32 бит");
   const duration = dataBytes / format.rate;
-  if (duration < 1 || duration > 600)
-    throw new Error("Длительность должна быть 1–600 секунд");
-  return Math.round(duration);
+  if (duration <= 0) throw new Error("В WAV нет звуковых данных");
+  return Math.max(1, Math.round(duration));
 }
 export function initializeUploads(db) {
   db.exec(
@@ -79,7 +80,7 @@ export function uploadRoutes(app, db, { directory, moderator, store = localAudio
   app.post(
     "/api/uploads",
     user,
-    express.raw({ type: "audio/wav", limit: "20mb" }),
+    express.raw({ type: Object.values(recordingTypes), limit: maxRecordingBytes }),
     async (req, res, next) => {
       const parsed = z
         .object({
@@ -95,13 +96,23 @@ export function uploadRoutes(app, db, { directory, moderator, store = localAudio
         return res.status(400).json({
           message: "Проверьте название, город, координаты и лицензию CC0",
         });
+      const extension = Object.keys(recordingTypes).find(ext => req.is(recordingTypes[ext]));
+      if (!extension) return res.status(415).json({ message: "Выберите WAV, MP3, Ogg, FLAC или M4A" });
       let duration;
       try {
-        duration = wavDuration(req.body);
-      } catch (error) {
-        return res.status(400).json({ message: error.message });
+        if (extension === "wav") {
+          duration = wavDuration(req.body);
+        } else {
+          const { format } = await parseBuffer(req.body, { mimeType: recordingTypes[extension] },
+            { duration: true, skipCovers: true });
+          if (!Number.isFinite(format.duration) || format.duration <= 0 || !format.sampleRate)
+            throw new Error("Invalid audio");
+          duration = Math.max(1, Math.round(format.duration));
+        }
+      } catch {
+        return res.status(400).json({ message: "Не удалось прочитать аудиофайл выбранного формата" });
       }
-      const file = randomUUID() + ".wav",
+      const file = randomUUID() + "." + extension,
         now = new Date().toISOString();
       let written = false;
       try {
@@ -178,7 +189,7 @@ export function uploadRoutes(app, db, { directory, moderator, store = localAudio
       .get(Number(req.params.id));
     if (!row) return res.status(404).end();
     res.set({
-      "Content-Type": "audio/wav",
+      "Content-Type": recordingType(row.file),
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     });
@@ -202,7 +213,7 @@ export function uploadRoutes(app, db, { directory, moderator, store = localAudio
       .get(Number(req.params.id));
     if (!row) return res.status(404).end();
     res.set({
-      "Content-Type": "audio/wav",
+      "Content-Type": recordingType(row.file),
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     });
