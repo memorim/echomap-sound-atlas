@@ -35,8 +35,31 @@ async function load(...args) {
 let sounds = [], active = 0, playing = false, playback = 0, starting = false;
 const audio = new Audio();
 audio.preload = "none";
+let playbackSource;
+const positions = new Map();
 const seek = document.querySelector("#seek");
 const volume = document.querySelector("#volume");
+const elapsed = document.querySelector("#elapsed");
+function position(source) {
+  if (!source) return 0;
+  if (!positions.has(source)) {
+    let saved = 0;
+    try { saved = Number(localStorage.getItem("echomap-position:" + source)); } catch {}
+    positions.set(source, Number.isFinite(saved) && saved > 0 ? saved : 0);
+  }
+  return positions.get(source);
+}
+function rememberPosition(source, seconds) {
+  positions.set(source, seconds);
+  try {
+    if (seconds > 0) localStorage.setItem("echomap-position:" + source, String(seconds));
+    else localStorage.removeItem("echomap-position:" + source);
+  } catch {}
+}
+function showPosition(seconds) {
+  elapsed.textContent = fmt(seconds);
+  seek.value = String(seconds);
+}
 try {
   const saved = localStorage.getItem("echomap-volume");
   if (saved !== null && /^(100|[1-9]?\d)$/.test(saved)) volume.value = saved;
@@ -129,8 +152,7 @@ function select(index, autoplay = false) {
       "Выберите другое настроение";
     document.querySelector("#meta").textContent = "";
     document.querySelector("#duration").textContent = "00:00";
-    document.querySelector("#elapsed").textContent = "00:00";
-    seek.value = "0";
+    showPosition(0);
     return;
   }
   locationMap.fitBounds(sounds.filter(sound => sound.city === s.city).map(sound => [sound.lat, sound.lng]), {padding:[40,40],maxZoom:13,animate:false});
@@ -155,8 +177,8 @@ function select(index, autoplay = false) {
   document.querySelector("#title").textContent = s.title;
   document.querySelector("#description").textContent = s.description;
   document.querySelector("#duration").textContent = fmt(s.duration);
-  document.querySelector("#elapsed").textContent = "00:00";
-  seek.value = "0";
+  seek.max = String(s.duration);
+  showPosition(position(s.audio_url));
   document
     .querySelectorAll(".sound-row button")
     .forEach((button) =>
@@ -178,7 +200,8 @@ async function play() {
   control.textContent = "…";
   control.setAttribute("aria-label", "Отменить запуск");
   status.textContent = "Загружаем аудиозапись…";
-  audio.src = sound.audio_url;
+  playbackSource = sound.audio_url;
+  audio.src = playbackSource;
   try {
     await audio.play();
     if (version !== playback) return;
@@ -193,31 +216,38 @@ async function play() {
     status.textContent = "Не удалось загрузить аудиозапись. Повторите воспроизведение.";
   }
 }
-function stop() {
+function stop({ completed = false } = {}) {
+  if (playbackSource) {
+    if (completed) rememberPosition(playbackSource, 0);
+    else if (Number.isFinite(audio.duration) && audio.readyState > 0 && !audio.error)
+      rememberPosition(playbackSource, audio.currentTime);
+  }
+  playbackSource = undefined;
   playback++; starting = false; playing = false;
   seek.disabled = true;
-  seek.value = "0";
   audio.pause();
   audio.removeAttribute("src");
   audio.load();
+  showPosition(position(sounds[active]?.audio_url));
   const control = document.querySelector(".play");
   control.textContent = "▶";
   control.setAttribute("aria-label", "Воспроизвести");
   control.setAttribute("aria-pressed", "false");
 }
 audio.addEventListener("timeupdate", () => {
-  const duration = audio.duration;
-  document.querySelector("#elapsed").textContent = fmt(audio.currentTime);
-  if (Number.isFinite(duration)) seek.value = String(audio.currentTime);
+  if (playbackSource && audio.readyState > 0) showPosition(audio.currentTime);
 });
 audio.addEventListener("loadedmetadata", () => {
-  if (Number.isFinite(audio.duration)) {
+  if (playbackSource && Number.isFinite(audio.duration)) {
+    const saved = position(playbackSource);
+    if (saved > 0 && saved < audio.duration) audio.currentTime = saved;
     seek.disabled = false;
     seek.max = String(audio.duration);
     document.querySelector("#duration").textContent = fmt(audio.duration);
+    showPosition(audio.currentTime);
   }
 });
-audio.addEventListener("ended", stop);
+audio.addEventListener("ended", () => stop({ completed: true }));
 audio.addEventListener("error", () => {
   if (!playing && !starting) return;
   stop();

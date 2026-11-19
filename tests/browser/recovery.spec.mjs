@@ -28,6 +28,29 @@ test('one audio element is reused and page exit releases its resource',async({pa
  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
  expect(await page.evaluate(()=>lastAudio.paused&&!lastAudio.hasAttribute('src'))).toBe(true);
 });
+
+test('playback resumes after stopping, switching tracks and reloading', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.sound-row')).toHaveCount(8);
+  const play = page.locator('.play');
+  const seek = page.locator('#seek');
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+  await seek.evaluate(input => {
+    input.value = '4';
+    input.dispatchEvent(new Event('input'));
+  });
+  await expect(page.locator('#elapsed')).toHaveText('00:04');
+  await play.click();
+  await page.locator('.next').click();
+  await expect(page.locator('#elapsed')).toHaveText('00:00');
+  await page.reload();
+  await expect(page.locator('.sound-row')).toHaveCount(8);
+  await expect(page.locator('#elapsed')).toHaveText('00:04');
+  await play.click();
+  await expect(play).toHaveAttribute('aria-pressed', 'true');
+  expect(Number(await seek.inputValue())).toBeGreaterThanOrEqual(4);
+});
 test('a delayed play promise cannot revive the previous selection',async({page})=>{
  await page.addInitScript(()=>{const nativePlay=HTMLMediaElement.prototype.play;let held=false;HTMLMediaElement.prototype.play=function(){if(!held){held=true;return new Promise(resolve=>window.releaseAudio=resolve)}return nativePlay.call(this)}});
  await page.goto('/');await expect(page.locator('.sound-row')).toHaveCount(8);await page.locator('.play').click();await expect(page.locator('.play')).toHaveText('…');await page.locator('.next').click();await page.evaluate(()=>window.releaseAudio());await expect(page.locator('.play')).toHaveAttribute('aria-pressed','false');
