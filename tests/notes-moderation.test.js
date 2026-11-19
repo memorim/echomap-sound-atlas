@@ -12,6 +12,7 @@ test("public notes require an author, stay private until approved and share pers
   Object.assign(process.env, {
     APP_PUBLIC_ORIGIN: "https://echo.example",
     APP_OWNER_TOKEN: owner,
+    ECHOMAP_NOTES_REQUIRE_REVIEW: "1",
     APP_UPLOADERS: JSON.stringify({
       [createHash("sha256").update(token).digest("hex")]: "alice",
     }),
@@ -68,7 +69,38 @@ test("public notes require an author, stay private until approved and share pers
       "APP_PUBLIC_ORIGIN",
       "APP_OWNER_TOKEN",
       "APP_UPLOADERS",
+      "ECHOMAP_NOTES_REQUIRE_REVIEW",
     ])
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+  }
+});
+
+test("guests can publish a note and the owner can hide it", async () => {
+  const saved = { ...process.env };
+  Object.assign(process.env, {
+    APP_PUBLIC_ORIGIN: "https://echo.example",
+    APP_OWNER_TOKEN: "z".repeat(40),
+    ECHOMAP_NOTES_REQUIRE_REVIEW: "0",
+  });
+  const db = createDb(":memory:");
+  try {
+    const app = createApp(db);
+    const call = (method, path) => request(app)[method](path).set("Host", "echo.example");
+    const note = { soundId: 1, author: "Guest", note: "A new field note" };
+    assert.equal((await call("post", "/api/notes").send({ ...note, website: "spam" })).status, 400);
+    const added = await call("post", "/api/notes").send(note);
+    assert.equal(added.status, 201);
+    assert.equal(added.body.status, "approved");
+    const read = () => call("get", "/api/sounds/1");
+    assert.equal((await read()).body.notes.find(n => n.id === added.body.id).author, "Guest (гость)");
+    const hide = () => call("patch", "/api/owner/notes/" + added.body.id).send({ status: "rejected" });
+    assert.equal((await hide()).status, 401);
+    assert.equal((await hide().auth("z".repeat(40), { type: "bearer" })).status, 200);
+    assert.ok(!(await read()).body.notes.some(n => n.id === added.body.id));
+  } finally {
+    db.close();
+    for (const name of ["APP_PUBLIC_ORIGIN", "APP_OWNER_TOKEN", "ECHOMAP_NOTES_REQUIRE_REVIEW"])
       if (saved[name] === undefined) delete process.env[name];
       else process.env[name] = saved[name];
   }

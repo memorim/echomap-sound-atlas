@@ -12,6 +12,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const recordings = JSON.parse(
@@ -66,6 +67,7 @@ export function createApp(
   db = adaptDatabase(db);
   const app = express();
   const hosted = publicOrigin();
+  const reviewNotes = Boolean(hosted) && process.env.ECHOMAP_NOTES_REQUIRE_REVIEW === "1";
   app.use("/api", (req, res, next) => {
     if (
       hosted
@@ -84,6 +86,7 @@ export function createApp(
     next();
   });
   app.use(express.json({ limit: "16kb" }));
+  app.get("/api/capabilities", (_req, res) => res.json({ reviewNotes }));
   uploadRoutes(app, db, {
     directory: uploadDirectory,
     store: audioStore,
@@ -161,7 +164,7 @@ export function createApp(
     res.json(
       await db
         .prepare(
-          "SELECT * FROM field_notes WHERE status='pending' ORDER BY id DESC LIMIT 100",
+          "SELECT * FROM field_notes WHERE status IN ('pending','approved') ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END,id DESC LIMIT 100",
         )
         .all(),
     ),
@@ -171,18 +174,34 @@ export function createApp(
       return res.status(400).json({ message: "Неверный статус" });
     const out = await db
       .prepare(
-        "UPDATE field_notes SET status=? WHERE id=? AND status='pending'",
+        "UPDATE field_notes SET status=? WHERE id=? AND status IN ('pending','approved') AND status<>?",
       )
-      .run(req.body.status, Number(req.params.id));
+      .run(req.body.status, Number(req.params.id), req.body.status);
     res.status(out.changes ? 200 : 409).json({ ok: !!out.changes });
   });
   app.post(
     "/api/notes",
-    (req, res, next) => (hosted ? authorAccess(req, res, next) : next()),
+    (req, res, next) => (reviewNotes || (hosted && req.get("authorization"))
+      ? authorAccess(req, res, next)
+      : next()),
     async (req, res) => {
+      if (req.body?.website)
+        return res.status(400).json({ message: "Проверьте текст заметки" });
+      const parsed = noteSchema.safeParse(req.body);
+      if (!parsed.success)
+        return res.status(400).json({ message: "Проверьте текст заметки" });
+      const guest = hosted && !req.authorId;
+      if (guest) {
+        const capacity = await consumeBudget(db, "notes:guests", 120, Date.now());
+        if (!capacity.allowed) return res.set("Retry-After", String(capacity.retryAfter))
+          .status(429).json({ message: "Слишком много заметок. Повторите позже" });
+      }
+      const identity = guest
+        ? "guest:" + createHash("sha256").update(req.ip + ":" + parsed.data.author.toLowerCase()).digest("hex")
+        : req.authorId || "local";
       const budget = await consumeBudget(
         db,
-        "notes:" + (req.authorId || "local"),
+        "notes:" + identity,
         10,
         Date.now(),
       );
@@ -191,9 +210,6 @@ export function createApp(
           .set("Retry-After", String(budget.retryAfter))
           .status(429)
           .json({ message: "Слишком много заметок. Повторите позже" });
-      const parsed = noteSchema.safeParse(req.body);
-      if (!parsed.success)
-        return res.status(400).json({ message: "Проверьте текст заметки" });
       const sound = await db
         .prepare(
           "SELECT id FROM sounds WHERE id=? AND id NOT IN (SELECT sound_id FROM user_recordings WHERE status!='approved')",
@@ -206,16 +222,16 @@ export function createApp(
         )
         .run(
           parsed.data.soundId,
-          req.authorId || parsed.data.author,
+          req.authorId || parsed.data.author + (guest ? " (гость)" : ""),
           parsed.data.note,
           new Date().toISOString(),
-          hosted ? "pending" : "approved",
+          reviewNotes ? "pending" : "approved",
         );
       res
         .status(201)
         .json({
           id: Number(out.lastInsertRowid),
-          status: hosted ? "pending" : "approved",
+          status: reviewNotes ? "pending" : "approved",
         });
     },
   );

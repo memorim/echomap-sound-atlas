@@ -273,9 +273,14 @@ document.querySelectorAll("[data-mood]").forEach(
 );
 const notesPanel = document.createElement('section');
 notesPanel.className = 'field-notes';
-notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label>Ключ автора для публичного сервера <input name="accessKey" type="password" autocomplete="off"></label><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
+notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label id="note-author-key" hidden>Ключ автора <input name="accessKey" type="password" autocomplete="off"></label><label hidden>Website<input name="website" tabindex="-1" autocomplete="off"></label><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
 document.querySelector('main').append(notesPanel);
 const notesForm = document.querySelector('#notes-form');
+fetch('/api/capabilities').then(response => response.json()).then(({ reviewNotes }) => {
+  document.querySelector('#note-author-key').hidden = !reviewNotes;
+  notesForm.elements.accessKey.required = Boolean(reviewNotes);
+}).catch(() => {});
+
 let noteSoundId, notesRequest = 0;
 const drafts = new Map();
 async function loadNotes(soundId) {
@@ -317,7 +322,7 @@ notesForm.onsubmit = async (event) => {
   const draft = notesForm.elements.note.value;
   try {
     const response = await fetch('/api/notes', { method:'POST', headers:{'Content-Type':'application/json',...(notesForm.elements.accessKey.value?{Authorization:'Bearer '+notesForm.elements.accessKey.value}:{})},
-      body:JSON.stringify({soundId, author:notesForm.elements.author.value, note:draft}) });
+      body:JSON.stringify({soundId, author:notesForm.elements.author.value, note:draft, website:notesForm.elements.website.value}) });
     if (!response.ok) throw new Error();
     const receipt = await response.json();
     drafts.delete(soundId);
@@ -334,5 +339,5 @@ load();
 
 const uploadPanel=document.createElement('section');uploadPanel.className='field-notes';
 uploadPanel.innerHTML='<h2>Добавить аудиозапись</h2><p>WAV, MP3, Ogg, FLAC или M4A, до 64 МиБ. Перед публикацией запись проверит модератор.</p><form id="upload-audio"><label>Ключ автора<input name="token" type="password" minlength="32" required autocomplete="off"></label><label>Название<input name="title" required minlength="3" maxlength="100"></label><label>Город<input name="city" required minlength="2" maxlength="80"></label><label>Широта<input name="lat" type="number" step="any" min="-90" max="90" required></label><label>Долгота<input name="lng" type="number" step="any" min="-180" max="180" required></label><label>Аудиофайл<input name="audio" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a" required></label><label><input name="consent" type="checkbox" required> Я автор записи и разрешаю её публикацию по CC0.</label><button type="submit">Отправить на модерацию</button><p role="status"></p></form>';
-document.querySelector('main').append(uploadPanel);
+if (!globalThis.PORTFOLIO_DEMO) document.querySelector('main').append(uploadPanel);
 uploadPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,button=form.querySelector('button'),status=form.querySelector('p'),file=form.elements.audio.files[0];const type={wav:'audio/wav',mp3:'audio/mpeg',ogg:'audio/ogg',flac:'audio/flac',m4a:'audio/mp4'}[file?.name.split('.').pop().toLowerCase()];if(!type||file.size>64*1024*1024){status.textContent='Выберите аудиофайл до 64 МиБ';return;}button.disabled=true;try{const query=new URLSearchParams({title:form.elements.title.value,city:form.elements.city.value,lat:form.elements.lat.value,lng:form.elements.lng.value,license:'CC0-1.0'});const response=await fetch('/api/uploads?'+query,{method:'POST',headers:{'Content-Type':type,Authorization:'Bearer '+form.elements.token.value},body:file});const data=await response.json();status.textContent=response.ok?'Запись №'+data.id+' отправлена на модерацию':data.message;if(response.ok)form.elements.audio.value='';}catch{status.textContent='Не удалось загрузить запись. Повторите позже.';}finally{button.disabled=false;}};

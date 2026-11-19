@@ -1,5 +1,4 @@
 // Browser-only adapter, loaded exclusively by scripts/build_demo.py.
-// ponytail: state lasts for one page session; use the documented server for shared, durable data.
 (() => {
   const state = structuredClone(globalThis.DEMO_SEED);
   const fail = (message, status = 400) => {
@@ -45,8 +44,35 @@
   };
   globalThis.PORTFOLIO_DEMO = true;
 
-  async function handle(url, method) {
+  const notesKey = "echomap-note-drafts-v1";
+  let notes = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(notesKey) || "[]");
+    if (Array.isArray(saved)) notes = saved;
+  } catch {}
+  async function handle(url, method, body) {
+    if (url.pathname === "/api/capabilities" && method === "GET") return json({ reviewNotes: false });
+    if (url.pathname === "/api/notes" && method === "POST") {
+      if (body.website || !state["/api/sounds"].some(sound => sound.id === body.soundId))
+        fail("Проверьте выбранную запись");
+      const note = {
+        id: String(crypto.randomUUID()), sound_id: body.soundId,
+        author: text(body.author, 2, 50), note: text(body.note, 5, 300),
+        created_at: new Date().toISOString(),
+      };
+      const next = [note, ...notes];
+      try { localStorage.setItem(notesKey, JSON.stringify(next)); }
+      catch { fail("Не удалось сохранить заметку в браузере", 503); }
+      notes = next;
+      return json({ id: note.id, status: "approved" }, 201);
+    }
     if (method !== "GET") fail("Только чтение", 405);
+    const selection = /^\/api\/sounds\/(\d+)$/.exec(url.pathname);
+    if (selection) {
+      const sound = state["/api/sounds"].find(item => item.id === Number(selection[1]));
+      if (!sound) fail("Запись не найдена", 404);
+      return json({ ...sound, notes: notes.filter(note => note.sound_id === sound.id) });
+    }
     if (url.pathname === "/api/sounds") {
       const mood = url.searchParams.get("mood");
       return json(
