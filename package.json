@@ -12,19 +12,19 @@
     "test:contract": "node tests/check-contract.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1164.0",
+    "@aws-sdk/client-s3": "3.1169.0",
     "@neon/functions": "0.11.0",
     "express": "^5.3.0",
     "leaflet": "1.9.4",
     "music-metadata": "12.7.0",
-    "pg": "8.20.0",
+    "pg": "8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.1",
     "esbuild": "0.28.2",
     "fflate": "0.8.3",
-    "supertest": "^7.3.1"
+    "supertest": "^7.3.2"
   },
   "packageManager": "pnpm@11.7.0",
   "engines": {
