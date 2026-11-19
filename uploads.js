@@ -76,6 +76,16 @@ export function initializeUploads(db) {
   );
 }
 export function uploadRoutes(app, db, { directory, moderator, store = localAudioStore(directory) }) {
+  const quota = (name, fallback) => {
+    const setting = process.env[name] ?? String(fallback);
+    const value = Number(setting);
+    if (!/^\d+$/.test(setting) || !Number.isSafeInteger(value))
+      throw new Error(name + " must be a non-negative integer");
+    return value;
+  };
+  const maxFiles = quota("ECHOMAP_AUTHOR_MAX_FILES", 100);
+  const maxAuthorBytes = quota("ECHOMAP_AUTHOR_MAX_BYTES", 100 * 1024 * 1024);
+  const maxTotalBytes = quota("ECHOMAP_STORAGE_MAX_BYTES", 1024 * 1024 * 1024);
   const user = authorAccess;
   app.post(
     "/api/uploads",
@@ -123,13 +133,12 @@ export function uploadRoutes(app, db, { directory, moderator, store = localAudio
           )
           .get(req.authorId);
         if (
-          quota.count >= 100 ||
-          quota.bytes + req.body.length > 100 * 1024 * 1024 ||
-          (await db
+          (maxFiles && quota.count >= maxFiles) ||
+          (maxAuthorBytes && quota.bytes + req.body.length > maxAuthorBytes) ||
+          (maxTotalBytes && (await db
             .prepare("SELECT COALESCE(sum(size),0) bytes FROM user_recordings")
             .get()).bytes +
-            req.body.length >
-            1024 * 1024 * 1024
+            req.body.length > maxTotalBytes)
         ) {
           return null;
         }
