@@ -105,13 +105,12 @@ async function load() {
   const notes = await api("/api/owner/notes");
   table(
     $("notes"),
-    ["Автор", "Запись", "Заметка", "Решение"],
+    ["Автор", "Запись", "Заметка", "Статус", "Решение"],
     notes.map((n) => {
       const actions = el("div");
-      for (const [label, status] of [
-        ["Одобрить", "approved"],
-        ["Отклонить", "rejected"],
-      ])
+      for (const [label, status] of (n.status === "pending"
+        ? [["Одобрить", "approved"], ["Отклонить", "rejected"]]
+        : [["Скрыть", "rejected"]]))
         actions.append(
           action(label, async () => {
             await api("/api/owner/notes/" + n.id, {
@@ -122,7 +121,7 @@ async function load() {
             message("Решение сохранено.");
           }),
         );
-      return [n.author, n.sound_id, n.note, actions];
+      return [n.author, n.sound_id, n.note, n.status, actions];
     }),
   );
   const rows = await api("/api/owner/uploads");

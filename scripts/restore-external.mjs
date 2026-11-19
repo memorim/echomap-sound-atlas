@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { recordingType } from '../recording-format.js';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
@@ -20,7 +21,7 @@ try{
  for(const entry of snapshot.audio){
   const r=await source.send(new GetObjectCommand({Bucket:'echomap-backups',Key:entry.key}));const body=Buffer.from(await r.Body.transformToByteArray());
   if(body.length!==entry.bytes||bytesHash(body)!==entry.sha256)throw new Error('Backup audio checksum mismatch');
-  await target.send(new PutObjectCommand({Bucket:bucket,Key:'uploads/'+entry.file,Body:body,ContentType:'audio/wav',CacheControl:'private, no-store'}));
+  await target.send(new PutObjectCommand({Bucket:bucket,Key:'uploads/'+entry.file,Body:body,ContentType:recordingType(entry.file),CacheControl:'private, no-store'}));
   const restored=await target.send(new GetObjectCommand({Bucket:bucket,Key:'uploads/'+entry.file}));
   if(bytesHash(Buffer.from(await restored.Body.transformToByteArray()))!==entry.sha256)throw new Error('Restored audio checksum mismatch');
  }

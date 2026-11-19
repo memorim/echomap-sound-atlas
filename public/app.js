@@ -35,8 +35,31 @@ async function load(...args) {
 let sounds = [], active = 0, playing = false, playback = 0, starting = false;
 const audio = new Audio();
 audio.preload = "none";
+let playbackSource;
+const positions = new Map();
 const seek = document.querySelector("#seek");
 const volume = document.querySelector("#volume");
+const elapsed = document.querySelector("#elapsed");
+function position(source) {
+  if (!source) return 0;
+  if (!positions.has(source)) {
+    let saved = 0;
+    try { saved = Number(localStorage.getItem("echomap-position:" + source)); } catch {}
+    positions.set(source, Number.isFinite(saved) && saved > 0 ? saved : 0);
+  }
+  return positions.get(source);
+}
+function rememberPosition(source, seconds) {
+  positions.set(source, seconds);
+  try {
+    if (seconds > 0) localStorage.setItem("echomap-position:" + source, String(seconds));
+    else localStorage.removeItem("echomap-position:" + source);
+  } catch {}
+}
+function showPosition(seconds) {
+  elapsed.textContent = fmt(seconds);
+  seek.value = String(seconds);
+}
 try {
   const saved = localStorage.getItem("echomap-volume");
   if (saved !== null && /^(100|[1-9]?\d)$/.test(saved)) volume.value = saved;
@@ -99,7 +122,7 @@ function render() {
     sounds
       .map(
         (s, i) =>
-          `<article class="sound-row" data-index="${i}" style="--color:${s.color}"><i>${String(i + 1).padStart(2, "0")}</i><div><h3>${escapeText(s.title)}</h3><small>${escapeText(s.city.toUpperCase())} · ${escapeText(s.district.toUpperCase())}</small></div><span>${escapeText(s.texture)}</span><span>${"MP3 · CC0"}</span><button>Слушать ${fmt(s.duration)}</button></article>`,
+          `<article class="sound-row" data-index="${i}" style="--color:${s.color}"><i>${String(i + 1).padStart(2, "0")}</i><div><h3>${escapeText(s.title)}</h3><small>${escapeText(s.city.toUpperCase())} · ${escapeText(s.district.toUpperCase())}</small></div><span>${escapeText(s.texture)}</span><span>${escapeText(s.audio_format ?? "MP3")} · CC0</span><button>Слушать ${fmt(s.duration)}</button></article>`,
       )
       .join("") || '<p role="status">По выбранному настроению записей нет.</p>';
   document
@@ -129,8 +152,7 @@ function select(index, autoplay = false) {
       "Выберите другое настроение";
     document.querySelector("#meta").textContent = "";
     document.querySelector("#duration").textContent = "00:00";
-    document.querySelector("#elapsed").textContent = "00:00";
-    seek.value = "0";
+    showPosition(0);
     return;
   }
   locationMap.fitBounds(sounds.filter(sound => sound.city === s.city).map(sound => [sound.lat, sound.lng]), {padding:[40,40],maxZoom:13,animate:false});
@@ -155,8 +177,8 @@ function select(index, autoplay = false) {
   document.querySelector("#title").textContent = s.title;
   document.querySelector("#description").textContent = s.description;
   document.querySelector("#duration").textContent = fmt(s.duration);
-  document.querySelector("#elapsed").textContent = "00:00";
-  seek.value = "0";
+  seek.max = String(s.duration);
+  showPosition(position(s.audio_url));
   document
     .querySelectorAll(".sound-row button")
     .forEach((button) =>
@@ -178,7 +200,8 @@ async function play() {
   control.textContent = "…";
   control.setAttribute("aria-label", "Отменить запуск");
   status.textContent = "Загружаем аудиозапись…";
-  audio.src = sound.audio_url;
+  playbackSource = sound.audio_url;
+  audio.src = playbackSource;
   try {
     await audio.play();
     if (version !== playback) return;
@@ -193,31 +216,38 @@ async function play() {
     status.textContent = "Не удалось загрузить аудиозапись. Повторите воспроизведение.";
   }
 }
-function stop() {
+function stop({ completed = false } = {}) {
+  if (playbackSource) {
+    if (completed) rememberPosition(playbackSource, 0);
+    else if (Number.isFinite(audio.duration) && audio.readyState > 0 && !audio.error)
+      rememberPosition(playbackSource, audio.currentTime);
+  }
+  playbackSource = undefined;
   playback++; starting = false; playing = false;
   seek.disabled = true;
-  seek.value = "0";
   audio.pause();
   audio.removeAttribute("src");
   audio.load();
+  showPosition(position(sounds[active]?.audio_url));
   const control = document.querySelector(".play");
   control.textContent = "▶";
   control.setAttribute("aria-label", "Воспроизвести");
   control.setAttribute("aria-pressed", "false");
 }
 audio.addEventListener("timeupdate", () => {
-  const duration = audio.duration;
-  document.querySelector("#elapsed").textContent = fmt(audio.currentTime);
-  if (Number.isFinite(duration)) seek.value = String(audio.currentTime);
+  if (playbackSource && audio.readyState > 0) showPosition(audio.currentTime);
 });
 audio.addEventListener("loadedmetadata", () => {
-  if (Number.isFinite(audio.duration)) {
+  if (playbackSource && Number.isFinite(audio.duration)) {
+    const saved = position(playbackSource);
+    if (saved > 0 && saved < audio.duration) audio.currentTime = saved;
     seek.disabled = false;
     seek.max = String(audio.duration);
     document.querySelector("#duration").textContent = fmt(audio.duration);
+    showPosition(audio.currentTime);
   }
 });
-audio.addEventListener("ended", stop);
+audio.addEventListener("ended", () => stop({ completed: true }));
 audio.addEventListener("error", () => {
   if (!playing && !starting) return;
   stop();
@@ -243,9 +273,14 @@ document.querySelectorAll("[data-mood]").forEach(
 );
 const notesPanel = document.createElement('section');
 notesPanel.className = 'field-notes';
-notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label>Ключ автора для публичного сервера <input name="accessKey" type="password" autocomplete="off"></label><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
+notesPanel.innerHTML = `<h2>Полевые заметки</h2><p id="notes-status" role="status"></p><ul id="notes-list"></ul><form id="notes-form"><label id="note-author-key" hidden>Ключ автора <input name="accessKey" type="password" autocomplete="off"></label><label hidden>Website<input name="website" tabindex="-1" autocomplete="off"></label><label>Ваше имя <input name="author" required minlength="2" maxlength="50" autocomplete="name"></label><label>Заметка <textarea name="note" required minlength="5" maxlength="300"></textarea></label><button type="submit">Добавить заметку</button></form>`;
 document.querySelector('main').append(notesPanel);
 const notesForm = document.querySelector('#notes-form');
+fetch('/api/capabilities').then(response => response.json()).then(({ reviewNotes }) => {
+  document.querySelector('#note-author-key').hidden = !reviewNotes;
+  notesForm.elements.accessKey.required = Boolean(reviewNotes);
+}).catch(() => {});
+
 let noteSoundId, notesRequest = 0;
 const drafts = new Map();
 async function loadNotes(soundId) {
@@ -287,7 +322,7 @@ notesForm.onsubmit = async (event) => {
   const draft = notesForm.elements.note.value;
   try {
     const response = await fetch('/api/notes', { method:'POST', headers:{'Content-Type':'application/json',...(notesForm.elements.accessKey.value?{Authorization:'Bearer '+notesForm.elements.accessKey.value}:{})},
-      body:JSON.stringify({soundId, author:notesForm.elements.author.value, note:draft}) });
+      body:JSON.stringify({soundId, author:notesForm.elements.author.value, note:draft, website:notesForm.elements.website.value}) });
     if (!response.ok) throw new Error();
     const receipt = await response.json();
     drafts.delete(soundId);
@@ -303,6 +338,6 @@ notesForm.onsubmit = async (event) => {
 load();
 
 const uploadPanel=document.createElement('section');uploadPanel.className='field-notes';
-uploadPanel.innerHTML='<h2>Добавить аудиозапись</h2><p>Несжатый PCM WAV, 1–600 секунд, до 20 МБ. Перед публикацией запись проверит модератор.</p><form id="upload-audio"><label>Ключ автора<input name="token" type="password" minlength="32" required autocomplete="off"></label><label>Название<input name="title" required minlength="3" maxlength="100"></label><label>Город<input name="city" required minlength="2" maxlength="80"></label><label>Широта<input name="lat" type="number" step="any" min="-90" max="90" required></label><label>Долгота<input name="lng" type="number" step="any" min="-180" max="180" required></label><label>Аудиофайл<input name="audio" type="file" accept="audio/wav,.wav" required></label><label><input name="consent" type="checkbox" required> Я автор записи и разрешаю её публикацию по CC0.</label><button type="submit">Отправить на модерацию</button><p role="status"></p></form>';
-document.querySelector('main').append(uploadPanel);
-uploadPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,button=form.querySelector('button'),status=form.querySelector('p'),file=form.elements.audio.files[0];if(!file||file.size>20*1024*1024){status.textContent='Выберите WAV до 20 МБ';return;}button.disabled=true;try{const query=new URLSearchParams({title:form.elements.title.value,city:form.elements.city.value,lat:form.elements.lat.value,lng:form.elements.lng.value,license:'CC0-1.0'});const response=await fetch('/api/uploads?'+query,{method:'POST',headers:{'Content-Type':'audio/wav',Authorization:'Bearer '+form.elements.token.value},body:file});const data=await response.json();status.textContent=response.ok?'Запись №'+data.id+' отправлена на модерацию':data.message;if(response.ok)form.elements.audio.value='';}catch{status.textContent='Не удалось загрузить запись. Повторите позже.';}finally{button.disabled=false;}};
+uploadPanel.innerHTML='<h2>Добавить аудиозапись</h2><p>WAV, MP3, Ogg, FLAC или M4A, до 64 МиБ. Перед публикацией запись проверит модератор.</p><form id="upload-audio"><label>Ключ автора<input name="token" type="password" minlength="32" required autocomplete="off"></label><label>Название<input name="title" required minlength="3" maxlength="100"></label><label>Город<input name="city" required minlength="2" maxlength="80"></label><label>Широта<input name="lat" type="number" step="any" min="-90" max="90" required></label><label>Долгота<input name="lng" type="number" step="any" min="-180" max="180" required></label><label>Аудиофайл<input name="audio" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a" required></label><label><input name="consent" type="checkbox" required> Я автор записи и разрешаю её публикацию по CC0.</label><button type="submit">Отправить на модерацию</button><p role="status"></p></form>';
+if (!globalThis.PORTFOLIO_DEMO) document.querySelector('main').append(uploadPanel);
+uploadPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,button=form.querySelector('button'),status=form.querySelector('p'),file=form.elements.audio.files[0];const type={wav:'audio/wav',mp3:'audio/mpeg',ogg:'audio/ogg',flac:'audio/flac',m4a:'audio/mp4'}[file?.name.split('.').pop().toLowerCase()];if(!type||file.size>64*1024*1024){status.textContent='Выберите аудиофайл до 64 МиБ';return;}button.disabled=true;try{const query=new URLSearchParams({title:form.elements.title.value,city:form.elements.city.value,lat:form.elements.lat.value,lng:form.elements.lng.value,license:'CC0-1.0'});const response=await fetch('/api/uploads?'+query,{method:'POST',headers:{'Content-Type':type,Authorization:'Bearer '+form.elements.token.value},body:file});const data=await response.json();status.textContent=response.ok?'Запись №'+data.id+' отправлена на модерацию':data.message;if(response.ok)form.elements.audio.value='';}catch{status.textContent='Не удалось загрузить запись. Повторите позже.';}finally{button.disabled=false;}};

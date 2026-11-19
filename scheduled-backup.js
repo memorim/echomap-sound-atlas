@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { maxRecordingBytes, recordingExtension, recordingType } from './recording-format.js';
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { parseTriggerDelivery } from '@neon/functions/triggers';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -31,12 +32,13 @@ export async function backupOnce({source,verification,s3,audio},now=new Date()) 
   };
   reader=await source.connect(); const snapshot=await exportSnapshot(reader);reader.release();reader=undefined;
   for(const recording of snapshot.rows.user_recordings) {
-   if(!/^[a-f0-9-]{36}\.wav$/.test(recording.file) || recording.size>20*1024*1024)throw new Error('Invalid source recording');
+   const extension=recordingExtension(recording.file);
+   if(!Number.isSafeInteger(recording.size) || recording.size<1 || recording.size>maxRecordingBytes)throw new Error('Invalid source recording');
    const body=await get(audio,sourceBucket,'uploads/'+recording.file);
    if(body.length!==recording.size)throw new Error('Source recording size differs');
-   const sha256=bytesHash(body),key='audio/'+sha256+'.wav'; let existing;
+   const sha256=bytesHash(body),key='audio/'+sha256+'.'+extension; let existing;
    try {existing=await get(s3,bucket,key);}catch(error){if(error.name!=='NoSuchKey' && error.$metadata?.httpStatusCode!==404)throw error;}
-   if(!existing){await put(key,body,'audio/wav');existing=await get(s3,bucket,key);}
+   if(!existing){await put(key,body,recordingType(recording.file));existing=await get(s3,bucket,key);}
    if(bytesHash(existing)!==sha256)throw new Error('Stored audio differs');
    snapshot.audio.push({file:recording.file,key,bytes:body.length,sha256});
   }
