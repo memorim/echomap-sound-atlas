@@ -14,7 +14,7 @@ index = output/'index.html'
 html = index.read_text(encoding='utf8').replace('/static/','')
 html = html.replace('<script ', '<script src="seed.js"></script><script src="demo.js"></script><script ', 1)
 html = html.replace('<script>', '<script src="seed.js"></script><script src="demo.js"></script><script>', 1) if 'src="seed.js"' not in html else html
-html = html.replace('</body>', '<footer class="browser-scope" style="padding:16px;text-align:center;font:12px/1.5 system-ui">Изменения в этой версии хранятся в текущей вкладке. <a href="https://github.com/memorim/echomap-sound-atlas#readme">Исходный код и запуск сервера</a></footer></body>')
+html = html.replace('</body>', '<footer class="browser-scope" style="padding:16px;text-align:center;font:12px/1.5 system-ui">Заметки сохраняются в этом браузере. <a href="https://github.com/memorim/echomap-sound-atlas#readme">Исходный код и запуск сервера</a></footer></body>')
 html = html.replace('href="/"','href="./"').replace('href="/docs"','href="https://github.com/memorim/echomap-sound-atlas#readme"')
 html = html.replace('Start watching','Добавить в текущую сессию').replace('Start monitoring →','Добавить в текущую сессию →')
 html = html.replace('id="check-now">Проверить сейчас','id="check-now">О сетевых проверках')
